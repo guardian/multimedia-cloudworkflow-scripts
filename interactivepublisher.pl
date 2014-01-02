@@ -7,6 +7,7 @@ use XML::SAX;
 use CDS::Parser::saxmeta;
 use CSLogger;
 use Data::Dumper;
+use LWP::UserAgent;
 
 our $fieldmapping = {
 	abitrate=>"tracks:audi:bitrate",
@@ -57,7 +58,7 @@ foreach(keys %{$fieldmapping}){
 	if($mdvalue){
 		$mapped_md{$_}=$mdvalue;
 	} else {
-		mylog($logid,"WARNING: Metadata did not specify any value for field $_, mapping from ".$fieldmapping->{$_}."\n");
+		warn($logid,"WARNING: Metadata did not specify any value for field $_, mapping from ".$fieldmapping->{$_}."\n");
 	}
 }
 return \%mapped_md;
@@ -76,6 +77,34 @@ print STDERR $msg;
 }
 
 sub mylog
+{
+my ($id,$msg)=@_;
+
+eval {
+$logger->logmsg(id=>$id,message=>$msg);
+};
+if($@){
+        print STDERR "Error trying to log to external logger: $@\n";
+}
+
+print STDERR $msg;
+}
+
+sub warn
+{
+my ($id,$msg)=@_;
+
+eval {
+$logger->logwarn(id=>$id,message=>$msg);
+};
+if($@){
+        print STDERR "Error trying to log to external logger: $@\n";
+}
+
+print STDERR $msg;
+}
+
+sub log_success
 {
 my ($id,$msg)=@_;
 
@@ -110,11 +139,6 @@ if($@){
 
 my $metadata=$handler->{'content'};
 return $metadata;
-}
-
-sub get_contentid {
-my $metadata=shift;
-
 }
 
 sub get_contentid
@@ -185,6 +209,20 @@ if($@){
 return 1;
 }
 
+sub get_mimetype {
+my $url=shift;
+
+my $ua=LWP::UserAgent->new;
+
+my $response=$ua->head($url);
+if($response->is_success){
+	return $response->header('Content-Type');
+} else {
+	error($logid,"ERROR: Unable to get mimetype for the url '$url': ".$response->status_line.".\n");
+	return undef;
+}
+}
+
 #START MAIN
 my $inmeta,$keepfile;
 our $debuglevel,$logid;
@@ -241,15 +279,18 @@ if($debuglevel>2){
 my $mapped_data=map_metadata($metadata);
 print Dumper($mapped_data);
 
+if($mapped_data->{'url'}){
+	$mapped_data->{'format'}=get_mimetype($mapped_data->{'url'});
+}
+
 $mapped_data->{'contentid'}=$contentid;
 my $r=add_encoding($mapped_data);
 
 if($r){
-	mylog($logid,"SUCCESS: Completed run to add ".$metadata->{'meta'}->{'filename'}." as a new record under id ".$contentid." to the database.\n");
+	log_success($logid,"SUCCESS: Completed run to add an encoding of type '".$mapped_data->{'format'}."' of file '".$metadata->{'meta'}->{'filename'}."' under id ".$contentid." to the database.\n");
 } else {
-	error($logid,"ERROR: Unable o add ".$metadata->{'meta'}->{'filename'}." as a new record 
-under id ".$contentid." to the database.\n");
+	error($logid,"ERROR: Unable to add ".$metadata->{'meta'}->{'filename'}." as a new record under id ".$contentid." to the database.\n");
 }
 
-#unlink($inmeta) unless($keep);
+unlink($inmeta) unless($keep);
 
