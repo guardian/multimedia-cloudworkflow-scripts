@@ -8,6 +8,7 @@ use CDS::Parser::saxmeta;
 use CSLogger;
 use Data::Dumper;
 use LWP::UserAgent;
+use File::Basename;
 
 our $fieldmapping = {
 	abitrate=>"tracks:audi:bitrate",
@@ -26,6 +27,45 @@ our $fieldmapping = {
 	frame_width=>"tracks:vide:width",
 	octopus_id=>"meta:octopus ID"
 };
+
+sub error
+{
+my ($id,$msg)=@_;
+
+eval {
+$logger->logerror(id=>$id,message=>$msg);
+};
+
+print STDERR $msg;
+}
+
+sub mylog
+{
+my ($id,$msg)=@_;
+
+eval {
+$logger->logmsg(id=>$id,message=>$msg);
+};
+if($@){
+        print STDERR "Error trying to log to external logger: $@\n";
+}
+
+print STDERR $msg;
+}
+
+sub mywarn
+{
+my ($id,$msg)=@_;
+
+eval {
+$logger->logwarning(id=>$id,message=>$msg);
+};
+if($@){
+        print STDERR "Error trying to log to external logger: $@\n";
+}
+
+print STDERR $msg;
+}
 
 sub get_value {
 my($metadata,$path)=@_;
@@ -58,50 +98,11 @@ foreach(keys %{$fieldmapping}){
 	if($mdvalue){
 		$mapped_md{$_}=$mdvalue;
 	} else {
-		warn($logid,"WARNING: Metadata did not specify any value for field $_, mapping from ".$fieldmapping->{$_}."\n");
+		mywarn($logid,"WARNING: Metadata did not specify any value for field $_, mapping from ".$fieldmapping->{$_}."\n");
 	}
 }
 return \%mapped_md;
 
-}
-
-sub error
-{
-my ($id,$msg)=@_;
-
-eval {
-$logger->logerror(id=>$id,message=>$msg);
-};
-
-print STDERR $msg;
-}
-
-sub mylog
-{
-my ($id,$msg)=@_;
-
-eval {
-$logger->logmsg(id=>$id,message=>$msg);
-};
-if($@){
-        print STDERR "Error trying to log to external logger: $@\n";
-}
-
-print STDERR $msg;
-}
-
-sub warn
-{
-my ($id,$msg)=@_;
-
-eval {
-$logger->logwarn(id=>$id,message=>$msg);
-};
-if($@){
-        print STDERR "Error trying to log to external logger: $@\n";
-}
-
-print STDERR $msg;
 }
 
 sub log_success
@@ -250,6 +251,7 @@ if($@){
 
 my @files;
 push @files,$metadata->{'filename'} if($metadata->{'filename'});
+push @files,basename($metadata->{'cdn_url'}) if(scalar @files<1 and $metadata->{'cdn_url'});
 push @files,$inmeta;
 
 my $tempmeta=$metadata->{'meta'};
@@ -280,6 +282,8 @@ my $mapped_data=map_metadata($metadata);
 print Dumper($mapped_data);
 
 if($mapped_data->{'url'}){
+	$mapped_data->{'url'}=~s/\|$//;	#sometimes CDS leaves a trailing delimiter that must be removed
+	$mapped_data->{'url'}=~s/,$//;	#to my knowledge nothing downstream does this, but might as well check it anyway...
 	$mapped_data->{'format'}=get_mimetype($mapped_data->{'url'});
 }
 
