@@ -287,6 +287,10 @@ if($mapped_data->{'url'}){
 	$mapped_data->{'format'}=get_mimetype($mapped_data->{'url'});
 }
 
+if(not $mapped_data->{'vbitrate'}=~/^\d+$/ or $mapped_data->{'vbitrate'}<1){
+	$mapped_data->{'vbitrate'}=$metadata->{'movie'}->{'bitrate'};
+}
+
 $mapped_data->{'contentid'}=$contentid;
 my $r=add_encoding($mapped_data);
 
