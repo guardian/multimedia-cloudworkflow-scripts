@@ -6,9 +6,10 @@ class CDSResponder
 attr_accessor :url
 attr_accessor :isexecuting
 
-def initialize(arn,routename,arg)
+def initialize(arn,routename,arg,notification)
 	@routename=routename
 	@cdsarg=arg
+	@notification_arn=notification
 	matchdata=arn.match(/^arn:aws:sqs:([^:]*):([^:]*):([^:]*)/);
 	@region=matchdata[1];
 	@acct=matchdata[2];
@@ -92,19 +93,44 @@ end
 
 end
 
+begin
+
 sqs=AWS::SQS.new(:region=>'eu-west-1');
 ddb=AWS::DynamoDB.new(:region=>'eu-west-1');
 
 table=ddb.tables['workflowmaster-cds-responder']
 table.hash_key = ['queue-arn',:string]
 
+responders = Array.new;
+
 table.items.each do |item|
-        puts item.hash_value
+        begin
+	puts item.hash_value
         item.attributes.each_key do |key|
                 puts "\t#{key} => #{item.attributes[key]}\n";
         end
-	responder=CDSResponder.new(item.attributes['queue-arn'],item.attributes['route-name'],"--input-"+item.attributes['input-type']);
+	for i in 1..item.attributes['threads']
+		responder=CDSResponder.new(item.attributes['queue-arn'],item.attributes['route-name'],"--input-"+item.attributes['input-type'],item.attributes['notification'])
+		responders.push(responder);
+	end
+
+	rescue
+		puts "Responder failed to start up for this queue\n";
+		next 
 	puts responder.url
-	responder.join
+	end
+end
+
+responders.each {|resp|
+	resp.join
+}
+
+#rescue
+#	print "Terminating program...\n"
+#ensure
+#	responders.each {|resp|
+#		resp.isexecuting=0
+#		resp.join
+#	}
 end
 
