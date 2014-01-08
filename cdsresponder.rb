@@ -1,6 +1,28 @@
 #!/usr/bin/env ruby
 
 require 'aws-sdk'
+require 'json'
+
+class FinishedNotification
+attr_accessor :exitcode
+attr_accessor :log
+attr_accessor :routename
+
+def initialize(routename,exitcode,log)
+	@routename=routename
+	@exitcode=exitcode
+	@log=log
+end
+
+def to_json
+	hash={}
+	self.instance_variables.each do |var|
+		hash[var]=self.instance_variable_get var
+	end
+	hash.to_json
+end
+
+end
 
 class CDSResponder
 attr_accessor :url
@@ -18,6 +40,11 @@ def initialize(arn,routename,arg,notification)
 	@sqs=AWS::SQS::new(:region=>'eu-west-1');
 	@q=@sqs.queues[@url]
 	@isexecuting=1;
+
+	if notification!=nil 
+		@sns=AWS::SNS.new(:region=>'eu-west-1')
+		@notification_topic=@sns.topics[notification]
+	end
 
 	@routefile=DownloadRoute()
 	
@@ -71,6 +98,16 @@ File.open(id+".xml", 'w'){ |f|
 id+".xml"
 end
 
+def GetLogfile(name)
+filename = @logpath+"/"+name+".log"
+File.open(@logpath+"/"+name+".log", 'r'){ |f|
+	contents=f.read()
+}
+contents
+rescue
+	puts "Unable to read log from filename\n"
+end
+
 def ThreadFunc
 
 while @isexecuting do
@@ -80,6 +117,10 @@ while @isexecuting do
 		triggerfile=OutputTriggerFile(msg.body,msg.id)
 		cmd=@commandline + triggerfile + " --logging-id=#{msg.id}"
 		system(cmd)
+
+		msg=FinishedNotification.new(@routename,$?.exitstatus,GetLogfile(msg.id))
+		@notification_topic.publish(msg.to_json)
+		
 		File.delete(triggerfile)
 	}
 end
