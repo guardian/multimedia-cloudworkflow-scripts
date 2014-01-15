@@ -46,10 +46,6 @@ def initialize(arn,routename,arg,notification)
 		@notification_topic=@sns.topics[notification]
 	end
 
-	@routefile=DownloadRoute()
-	
-	@commandline="cds_run --route \"#{@routefile}\" #{@cdsarg}="
-
 	@threadref=Thread.new {
 		ThreadFunc();
 	}
@@ -114,6 +110,9 @@ while @isexecuting do
 	@q.receive_message { |msg|
 		#puts "Received message:\n";
 		#puts "\t#{msg.body}\n";
+		@routefile=DownloadRoute()
+		@commandline="cds_run --route \"#{@routefile}\" #{@cdsarg}="
+
 		triggerfile=OutputTriggerFile(msg.body,msg.id)
 		cmd=@commandline + triggerfile + " --logging-id=#{msg.id}"
 		system(cmd)
@@ -122,6 +121,8 @@ while @isexecuting do
 		@notification_topic.publish(msg.to_json)
 		
 		File.delete(triggerfile)
+		File.delete(@routefile)
+
 	}
 end
 
