@@ -130,7 +130,7 @@ end
 
 def join
 @threadref.join
-File.delete(@routefile)
+#File.delete(@routefile)
 end
 
 end
