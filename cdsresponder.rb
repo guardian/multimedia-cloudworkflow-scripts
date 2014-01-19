@@ -114,7 +114,8 @@ while @isexecuting do
 		@commandline="cds_run --route \"#{@routefile}\" #{@cdsarg}="
 
 		triggerfile=OutputTriggerFile(msg.body,msg.id)
-		cmd=@commandline + triggerfile + " --logging-id=#{msg.id}"
+		#FIXME: should not be using static db credentials! should be in dynamodb somewhere.
+		cmd=@commandline + triggerfile + " --db-host=***REMOVED*** --db-login=cdslogger --db-pass=UYJUbwjdr7DnTFZu --logging-id=#{msg.id}"
 		system(cmd)
 
 		msg=FinishedNotification.new(@routename,$?.exitstatus,GetLogfile(msg.id))
