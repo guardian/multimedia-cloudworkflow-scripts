@@ -108,6 +108,7 @@ def ThreadFunc
 
 while @isexecuting do
 	@q.receive_message { |msg|
+	begin #start a block to catch exceptions
 		#puts "Received message:\n";
 		#puts "\t#{msg.body}\n";
 		@routefile=DownloadRoute()
@@ -115,15 +116,20 @@ while @isexecuting do
 
 		triggerfile=OutputTriggerFile(msg.body,msg.id)
 		#FIXME: should not be using static db credentials! should be in dynamodb somewhere.
-		cmd=@commandline + triggerfile + " --db-host=***REMOVED*** --db-login=cdslogger --db-pass=UYJUbwjdr7DnTFZu --logging-id=#{msg.id}"
+		cmd=@commandline + triggerfile + " --logging-db=***REMOVED*** --db-host=***REMOVED*** --db-login=cdslogger --db-pass=***REMOVED*** --logging-id=#{msg.id}"
 		system(cmd)
 
 		msg=FinishedNotification.new(@routename,$?.exitstatus,GetLogfile(msg.id))
 		@notification_topic.publish(msg.to_json)
-		
+	
+	rescue Exception => e
+		puts e.message
+		puts e.backtrace.inspect
+
+	ensure	
 		File.delete(triggerfile)
 		File.delete(@routefile)
-
+	end	#end block to catch exceptions
 	}
 end
 
