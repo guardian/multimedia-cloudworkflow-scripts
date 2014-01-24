@@ -2,6 +2,27 @@
 
 require 'aws-sdk'
 require 'json'
+require 'optparse'
+
+class ConfigFile
+attr_accessor :var
+
+def initialize(filename)
+
+unless File.exists?(filename)
+	raise "Requested configuration file #{filename} does not exist."
+end
+
+File.open(filename,"r"){ |f|
+	f.each_line { |line|
+		row=line.match(/^(?<name>[^=]+)=(?<value>.*)$/)
+		@var[row['name']]=row['value']
+	}
+}
+
+end
+
+end
 
 class FinishedNotification
 attr_accessor :exitcode
@@ -144,8 +165,34 @@ end
 
 begin
 
-sqs=AWS::SQS.new(:region=>'eu-west-1');
-ddb=AWS::DynamoDB.new(:region=>'eu-west-1');
+#Process any commandline options
+options={:configfile=>'/etc/cdsresponder.conf',:region='eu-west-1'}
+OptionParser.new do |opts|
+	opts.banner="Usage: cdsresponder.rb [--config=/path/to/config.file] [--region=aws-region]"
+
+	opts.on("-c","--config [CONFIGFILE]", "Path to the configuration file.  This should contain the following:",
+				"\tconfiguration-table={dynamodb table to use for configuration}",
+				"\troutes-table={dynamodb table to use for the routes content}",
+				"\tregion={AWS region to use for SQS and DynamoDB"
+				"\taccess-key={AWS access key} [Optional; default behaviour is to attempt connection via AWS roles"
+				"\tsecret-key={AWS secret key} [Optional; as above") do |cfg|
+		options.configfile=cfg
+	end
+
+	opts.on("-r","--region [REGION]","AWS region to connect to") do |r|
+		options.region=r
+	end
+
+end
+
+begin
+	cfg=ConfigFile.new(options.configfile)
+rescue Exception=>e
+	
+end
+
+sqs=AWS::SQS.new(:region=>options.region);
+ddb=AWS::DynamoDB.new(:region=>options.region);
 
 table=ddb.tables['workflowmaster-cds-responder']
 table.hash_key = ['queue-arn',:string]
