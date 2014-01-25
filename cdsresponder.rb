@@ -3,6 +3,7 @@
 require 'aws-sdk'
 require 'json'
 require 'optparse'
+require 'pp'
 
 class ConfigFile
 attr_accessor :var
@@ -12,6 +13,8 @@ def initialize(filename)
 unless File.exists?(filename)
 	raise "Requested configuration file #{filename} does not exist."
 end
+
+@var={}
 
 File.open(filename,"r"){ |f|
 	f.each_line { |line|
@@ -86,7 +89,7 @@ filename
 end
 
 def GetRouteContent
-ddb=AWS::DynamoDB.new(:region=>'eu-west-1')
+ddb=AWS::DynamoDB.new(:region=>$options[:region])
 table=ddb.tables['workflowmaster-cds-routes']
 table.hash_key=[ :routename,:string ]
 item=table.items[@routename]
@@ -166,35 +169,56 @@ end
 begin
 
 #Process any commandline options
-options={:configfile=>'/etc/cdsresponder.conf',:region='eu-west-1'}
+$options={:configfile=>'/etc/cdsresponder.conf',:region=>'UNKNOWN'}
 OptionParser.new do |opts|
 	opts.banner="Usage: cdsresponder.rb [--config=/path/to/config.file] [--region=aws-region]"
 
-	opts.on("-c","--config [CONFIGFILE]", "Path to the configuration file.  This should contain the following:",
-				"\tconfiguration-table={dynamodb table to use for configuration}",
+	opts.on("-c","--config CONFIGFILE", "Path to the configuration file.  This should contain the following:",
+				"   configuration-table={dynamodb table to use for configuration}",
 				"\troutes-table={dynamodb table to use for the routes content}",
-				"\tregion={AWS region to use for SQS and DynamoDB"
-				"\taccess-key={AWS access key} [Optional; default behaviour is to attempt connection via AWS roles"
+				"\tregion={AWS region to use for SQS and DynamoDB",
+				"\taccess-key={AWS access key} [Optional; default behaviour is to attempt connection via AWS roles",
 				"\tsecret-key={AWS secret key} [Optional; as above") do |cfg|
-		options.configfile=cfg
+		$options.configfile=cfg
 	end
 
 	opts.on("-r","--region [REGION]","AWS region to connect to") do |r|
-		options.region=r
+		$options.region=r
 	end
 
 end
 
+#Read in the configuration file.  cfg is declared as a global variable ($ prefix)
 begin
-	cfg=ConfigFile.new(options.configfile)
+	$cfg=ConfigFile.new($options[:configfile])
 rescue Exception=>e
-	
+	puts "Unable to load configuration file: #{e.message}.  Please consult the documentation, the online cdsconfig configuration tool or run with the -h option, for more finformation"
+	exit 1
 end
 
-sqs=AWS::SQS.new(:region=>options.region);
-ddb=AWS::DynamoDB.new(:region=>options.region);
+#If we still don't have a region to work in, use the default...
+if $options[:region] == 'UNKNOWN'
+	if $cfg.var['region']
+		$options[:region]=$cfg.var['region']
+	else
+		$options[:region]='eu-west-1'
+	end
+end
 
-table=ddb.tables['workflowmaster-cds-responder']
+puts "Commandline options:"
+p $options
+puts "Loaded config:"
+p $cfg
+
+sqs=AWS::SQS.new(:region=>$options[:region]);
+ddb=AWS::DynamoDB.new(:region=>$options[:region]);
+
+#table=ddb.tables['workflowmaster-cds-responder']
+table=ddb.tables[$cfg.var['configuration-table']]
+if !table or table==''
+	raise "Unable to connect to the table #{$cfg.var['configuration-table']}.  Has this been set up yet by the system administrator?"
+end
+
 table.hash_key = ['queue-arn',:string]
 
 responders = Array.new;
