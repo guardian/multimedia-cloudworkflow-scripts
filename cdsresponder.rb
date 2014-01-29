@@ -90,7 +90,7 @@ end
 
 def GetRouteContent
 ddb=AWS::DynamoDB.new(:region=>$options[:region])
-table=ddb.tables['workflowmaster-cds-routes']
+table=ddb.tables[$cfg.var['routes-table']]
 table.hash_key=[ :routename,:string ]
 item=table.items[@routename]
 item.attributes['content']
