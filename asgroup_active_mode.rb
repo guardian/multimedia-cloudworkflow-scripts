@@ -3,13 +3,11 @@
 require 'aws-sdk';
 
 def usage
-	puts "Put the given autoscaling group into 'weekend mode', i.e. set the minimum and desired capacity to zero."
-	puts "To undo this action, either run asgroup_active_mode to set the capacity back up to 1 or over-ride it in the EC2 Management Console"
+	puts "Put the given autoscaling group into 'active mode', i.e. set the minimum and desired capacity to one."
 	exit 1
 end
 
 #START MAIN
-attempts=100
 $asref=AWS::AutoScaling.new(:region=>'eu-west-1')
 
 if(ARGV.count!=1) then
@@ -28,10 +26,17 @@ unless(asgroup.exists?) then
 	exit 2
 end
 
-n=0
-begin
-asgroup.update(:min_size=>0)
-asgroup.set_desired_capacity(0,:honor_cooldown=>true)
+if(asgroup.min_size>0) then
+	puts "Minimum size for #{groupname} is already at #{asgroup.min_size} so I won't over-ride this."
+else
+	asgroup.update(:min_size=>1)
+end
+
+if(asgroup.desired_capacity>0) then
+	puts "Desired capacity for #{groupname} is already at #{asgroup.desired_capacity} so I won't over-ride this."
+else
+	asgroup.set_desired_capacity(0,:honor_cooldown=>true)
+end
 
 puts "Updated scaling group #{groupname}:"
 puts "\tmin_size: #{asgroup.min_size}"
@@ -50,14 +55,4 @@ asgroup.auto_scaling_instances.each { |instance|
 	puts "\t\tLifecycle state: #{instance.lifecycle_state}"
 	puts "\t\tHealth status: #{instance.health_status}"
 }
-
-rescue Exception =>e
-	n+=1
-	puts "Unable to perform autoscaling action on attempt #{n} of #{attempts}: #{e.message}. Will retry in 2 minutes"
-	sleep(120)
-	if(n<attempts) then
-		retry
-	end
-	exit 255
-end
 
