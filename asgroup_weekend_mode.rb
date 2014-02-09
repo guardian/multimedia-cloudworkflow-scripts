@@ -9,19 +9,23 @@ def usage
 end
 
 #START MAIN
-$asref=AWS::AutoScaling.new()
+$asref=AWS::AutoScaling.new(:region=>'eu-west-1')
 
-if(ARGV.count!=1){
+if(ARGV.count!=1) then
 	usage
 	exit 1
-}
+end
 
+puts "Autoscaling groups:"
+$asref.groups.each{ |group|
+	puts "\t#{group.name}"
+}
 groupname=ARGV[0]
 asgroup=$asref.groups[groupname]
-unless(asgroup.exists?){
+unless(asgroup.exists?) then
 	puts "The autoscaling group #{groupname} does not exist."
 	exit 2
-}
+end
 
 asgroup.update(:min_size=>0)
 asgroup.set_desired_capacity(0,:honor_cooldown=>true)
