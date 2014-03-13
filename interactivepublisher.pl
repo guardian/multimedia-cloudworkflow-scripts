@@ -165,9 +165,17 @@ if($sth->rows>0){
 } else {
 	#If it doesn't, try to return a new ID
 	mylog($logid,"get_contentid: no record presently exists for $filebase.\n");
-	my $sth=$dbh->prepare("insert into idmapping (filebase,octopus_id,project) values (?,?,?)");
+	my $sth;
+	if($metadata->{'meta'}->{'octopus ID'}){
+		$sth=$dbh->prepare("insert into idmapping (filebase,octopus_id,project) values (?,?,?)");
 	#FIXME: these mappings should not be hard-coded like this!
-	$sth->execute($filebase,$metadata->{'meta'}->{'octopus ID'},$metadata->{'meta'}->{'project_name'});
+		$sth->execute($filebase,$metadata->{'meta'}->{'octopus ID'},$metadata->{'meta'}->{'project_name'});
+	} else {
+                $sth=$dbh->prepare("insert into idmapping (filebase,project) values (?,?,?)");
+        #FIXME: these mappings should not be hard-coded like this!              
+  $sth->execute($filebase,$metadata->{'meta'}->{'project_name'});
+	}
+
 	$sth=$dbh->prepare("SELECT * from idmapping WHERE filebase=?");
 	$sth->execute($filebase);
 	if($sth->rows<1){
