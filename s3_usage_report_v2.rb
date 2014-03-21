@@ -7,11 +7,17 @@ def scan_bucket(table,bucket)
 total_size=0
 objects_scanned=0
 bucket.objects.each do |obj|
+begin
 	#csv << [ obj.key, obj.content_type, obj.content_length,obj.last_modified ]
 	total_size+=obj.content_length
 	objects_scanned+=1
 	running_total=total_size/1024**3
 	print "\t\t#{objects_scanned} objects scanned, running total of #{running_total}Gb...\r";
+rescue AWS::S3::Errors::NoSuchKey=>e
+	puts "\nWarning: No such key (#{e.message}): #{obj.key} in bucket #{obj.bucket}"
+rescue Exception=>e
+	puts "\nWarning: An exception occurred - #{e.message}\n"
+end
 end
 total_size=total_size/1024**3
 
@@ -31,7 +37,13 @@ $ddb=AWS::DynamoDB.new(:region=>'eu-west-1')	#FIXME: should read default from ~/
 table = $ddb.tables['s3_usage_meta']
 table.hash_key = [ :entity, :string]
 
+while table.status == 'CREATING'
+	puts "Waiting for s3_usage_meta table to become ready..."
+	sleep(10)
+end
+
 begin
+threads=Array.new
 
 #CSV.open("s3_report.csv","wb") do |csv|
 	timestring=DateTime.now.strftime("%d %B %Y, %H:%M:%S")
@@ -41,13 +53,19 @@ begin
 		print "\t#{bucket.name}\n";
 		begin
 		#csv << [ "Bucket name: #{bucket.name}" ]
-		scan_bucket(table,bucket)
+		threads << Thread.new do
+			scan_bucket(table,bucket)
+		end
 		print "\n";	
 		rescue AWS::S3::Errors::AccessDenied=>e
 			puts "Warning: Access denied to bucket #{bucket.name}"
 		end
 	end
 #end
+
+threads.each do |thr|
+	thr.join
+end
 
 rescue AWS::S3::Errors::AccessDenied=>e
    puts "Warning: #{e.message}:\n\t#{e.http_request.headers.to_hash.to_s}\n\n#{e.http_response.body}"
