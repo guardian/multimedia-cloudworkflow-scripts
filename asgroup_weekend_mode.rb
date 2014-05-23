@@ -3,7 +3,7 @@
 require 'aws-sdk';
 
 def usage
-	puts "Put the given autoscaling group into 'weekend mode', i.e. set the minimum and desired capacity to zero."
+	puts "Put the given autoscaling group into 'weekend mode', i.e. set the minimum capacity to zero.  Desired capacity is left as-is in case a job is still in progress"
 	puts "To undo this action, either run asgroup_active_mode to set the capacity back up to 1 or over-ride it in the EC2 Management Console"
 	exit 1
 end
@@ -31,7 +31,7 @@ end
 n=0
 begin
 asgroup.update(:min_size=>0)
-asgroup.set_desired_capacity(0,:honor_cooldown=>true)
+#asgroup.set_desired_capacity(0,:honor_cooldown=>true)
 
 puts "Updated scaling group #{groupname}:"
 puts "\tmin_size: #{asgroup.min_size}"

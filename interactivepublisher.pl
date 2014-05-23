@@ -171,7 +171,7 @@ if($sth->rows>0){
 	#FIXME: these mappings should not be hard-coded like this!
 		$sth->execute($filebase,$metadata->{'meta'}->{'octopus ID'},$metadata->{'meta'}->{'project_name'});
 	} else {
-                $sth=$dbh->prepare("insert into idmapping (filebase,project) values (?,?,?)");
+                $sth=$dbh->prepare("insert into idmapping (filebase,project) values (?,?)");
         #FIXME: these mappings should not be hard-coded like this!              
   $sth->execute($filebase,$metadata->{'meta'}->{'project_name'});
 	}
