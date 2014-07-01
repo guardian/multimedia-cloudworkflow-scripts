@@ -3,6 +3,7 @@ require 'aws-sdk'
 require 'csv'
 
 def scan_bucket(table,bucket)
+begin
 
 total_size=0
 objects_scanned=0
@@ -15,10 +16,17 @@ begin
 	print "\t\t#{objects_scanned} objects scanned, running total of #{running_total}Gb...\r";
 rescue AWS::S3::Errors::NoSuchKey=>e
 	puts "\nWarning: No such key (#{e.message}): #{obj.key} in bucket #{obj.bucket}"
+	next
 rescue Exception=>e
 	puts "\nWarning: An exception occurred - #{e.message}\n"
-end
-end
+	next
+end #exception block
+end #bucket.objects.each
+
+rescue Exception=>e
+	puts "\nWarning: An exception occurred outside the scan loop - #{e.message}\n"
+
+ensure
 total_size=total_size/1024**3
 
 table.items.put(:entity=>bucket.name,
@@ -28,6 +36,7 @@ table.items.put(:entity=>bucket.name,
 
 #csv << [ "Total size of #{bucket.name}: #{total_size} Gb" ]
 #csv << [ "----------------------------------------------" ]
+end
 end
 
 #START MAIN
@@ -50,6 +59,10 @@ threads=Array.new
 #	csv << [ "S3 usage report compiled at #{timestring}" ]
 	print "Scanning available buckets...\n";
 	$s3.buckets.each do |bucket|
+		if(ARGV[0] and not bucket.name.match(ARGV[0]))
+			next
+		end
+
 		print "\t#{bucket.name}\n";
 		begin
 		#csv << [ "Bucket name: #{bucket.name}" ]
