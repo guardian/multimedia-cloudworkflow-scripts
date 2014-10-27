@@ -10,23 +10,43 @@ use Data::Dumper;
 use LWP::UserAgent;
 use File::Basename;
 
-our $fieldmapping = {
-	abitrate=>"tracks:audi:bitrate",
-	acodec=>"tracks:audi:format",
-	format=>"movie:format",
-	mobile=>"meta:for_mobile",
-	multirate=>"meta:is_multirate",
-	url=>"meta:cdn_url",
-	vbitrate=>"tracks:vide:bitrate",
-	vcodec=>"tracks:vide:format",
-	aspect=>"meta:aspect_ratio",
-	duration=>"movie:duration",
-	fcs_id=>"meta:FCS asset ID",
-	file_size=>"movie:size",
-	frame_height=>"tracks:vide:height",
-	frame_width=>"tracks:vide:width",
-	octopus_id=>"meta:octopus ID"
-};
+our @filename_fields = qw/filename originalFilename/;
+
+our @fieldmappings = [
+    {
+        abitrate=>"tracks:audi:bitrate",
+        acodec=>"tracks:audi:format",
+        format=>"movie:format",
+        mobile=>"meta:for_mobile",
+        multirate=>"meta:is_multirate",
+        url=>"meta:cdn_url",
+        vbitrate=>"tracks:vide:bitrate",
+        vcodec=>"tracks:vide:format",
+        aspect=>"meta:aspect_ratio",
+        duration=>"movie:duration",
+        fcs_id=>"meta:FCS asset ID",
+        file_size=>"movie:size",
+        frame_height=>"tracks:vide:height",
+        frame_width=>"tracks:vide:width",
+        octopus_id=>"meta:octopus ID"
+    },
+    {
+        abitrate=>"tracks:audi:aac_settings_bitrate",
+        acodec=>"tracks:audi:codec",
+        mobile=>"meta:for_mobile",
+        multirate=>"meta:is_multirate",
+        url=>"meta:cdn_url",
+        vbitrate=>"tracks:vide:h264_settings_bitrate",
+        vcodec=>"tracks:vide:codec",
+        aspect=>"meta:aspect_ratio", #can set this with derive_aspect_ratio in the feeding route
+        duration=>"meta:durationSeconds",
+        fcs_id=>"meta:itemId",
+        file_size=>"movie:size", #should be set by check_fix_size in the feeding route
+        frame_height=>"tracks:vide:height",
+        frame_width=>"tracks:vide:width",
+        octopus_id=>"meta:gnm_master_generic_titleid"
+    }
+];
 
 sub error
 {
@@ -91,15 +111,20 @@ sub map_metadata {
 my($metadata)=@_;
 my %mapped_md;
 
-foreach(keys %{$fieldmapping}){
-	print "debug:map_metadata: mapping $_ from path ".$fieldmapping->{$_}."...\n" if($debuglevel>3);
-	
-	my $mdvalue=get_value($metadata,$fieldmapping->{$_});
-	if($mdvalue){
-		$mapped_md{$_}=$mdvalue;
-	} else {
-		mywarn($logid,"WARNING: Metadata did not specify any value for field $_, mapping from ".$fieldmapping->{$_}."\n");
-	}
+for($n=0;$n<scalar @fieldmappings;++$n){
+    my $fieldmapping=$fieldmappings[$n];
+    foreach(keys %{$fieldmapping}){
+        unless($mapped_md{$_}){
+            print "debug:map_metadata: mapping $_ from path ".$fieldmapping->{$_}." using mapping set $n...\n" if($debuglevel>3);
+
+            my $mdvalue=get_value($metadata,$fieldmapping->{$_});
+            if($mdvalue){
+                $mapped_md{$_}=$mdvalue;
+            } else {
+                mywarn($logid,"WARNING: Metadata did not specify any value for field $_, mapping from ".$fieldmapping->{$_}."\n");
+            }
+        }
+    }
 }
 return \%mapped_md;
 
@@ -146,7 +171,16 @@ sub get_contentid
 {
 my $metadata=shift;
 
-my $filebase=$metadata->{'meta'}->{'filename'};
+my $filebase;
+foreach(@filename_fields){
+    $filebase=$metadata->{'meta'}->{$_};
+    last if($filebase);
+}
+unless($filebase){
+    error($logid,"Unable to find file name metadata from any key of @filename_fields");
+    return -1;
+}
+
 #Chop any file extension of the provided filename to form our base
 $filebase=~s/\.[^\.]+$//;
 
@@ -281,6 +315,10 @@ unless($dbh){
 }
 
 my $contentid=get_contentid($metadata);
+if($contentid<0){
+    error($logid,"Unable to get content ID");
+    exit(1);
+}
 
 if($debuglevel>2){
 	mylog($logid,"INFO: Got an ID of $contentid for the new database entry.\n");
