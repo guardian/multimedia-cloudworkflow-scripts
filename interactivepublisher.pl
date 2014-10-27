@@ -12,7 +12,18 @@ use File::Basename;
 
 our @filename_fields = qw/filename originalFilename/;
 
-our @fieldmappings = [
+our $fieldmultipliers = [
+    {
+ 	abitrate=>1,
+	vbitrate=>1
+    },
+    {
+	abitrate=>0.001,
+	vbitrate=>0.001
+    }
+];
+
+our $fieldmappings = [
     {
         abitrate=>"tracks:audi:bitrate",
         acodec=>"tracks:audi:format",
@@ -29,10 +40,12 @@ our @fieldmappings = [
         frame_height=>"tracks:vide:height",
         frame_width=>"tracks:vide:width",
         octopus_id=>"meta:octopus ID"
+#	filename=>"meta:filename"
     },
     {
         abitrate=>"tracks:audi:aac_settings_bitrate",
         acodec=>"tracks:audi:codec",
+	format=>"movie:extension",
         mobile=>"meta:for_mobile",
         multirate=>"meta:is_multirate",
         url=>"meta:cdn_url",
@@ -45,6 +58,7 @@ our @fieldmappings = [
         frame_height=>"tracks:vide:height",
         frame_width=>"tracks:vide:width",
         octopus_id=>"meta:gnm_master_generic_titleid"
+#	filename=>"meta:originalFilename"
     }
 ];
 
@@ -111,14 +125,18 @@ sub map_metadata {
 my($metadata)=@_;
 my %mapped_md;
 
-for($n=0;$n<scalar @fieldmappings;++$n){
-    my $fieldmapping=$fieldmappings[$n];
+for($n=0;$n<scalar @$fieldmappings;++$n){
+    my $fieldmapping=$fieldmappings->[$n];
+    print Dumper($fieldmapping);
     foreach(keys %{$fieldmapping}){
         unless($mapped_md{$_}){
             print "debug:map_metadata: mapping $_ from path ".$fieldmapping->{$_}." using mapping set $n...\n" if($debuglevel>3);
 
             my $mdvalue=get_value($metadata,$fieldmapping->{$_});
-            if($mdvalue){
+            if($mdvalue and $mdvalue !~ /^[^\w\d]*$/){
+		if($fieldmultipliers->[$n] and $fieldmultipliers->[$n]->{$_}){
+			$mdvalue=$mdvalue*$fieldmultipliers->[$n]->{$_};
+		}
                 $mapped_md{$_}=$mdvalue;
             } else {
                 mywarn($logid,"WARNING: Metadata did not specify any value for field $_, mapping from ".$fieldmapping->{$_}."\n");
@@ -259,6 +277,9 @@ my $ua=LWP::UserAgent->new;
 
 my $response=$ua->head($url);
 if($response->is_success){
+	if($response->header('Content-Type') eq "text/plain"){
+		return "application/x-mpegURL";	#assume that anything reporting itself as text is actually an m3u8
+	}
 	return $response->header('Content-Type');
 } else {
 	error($logid,"ERROR: Unable to get mimetype for the url '$url': ".$response->status_line.".\n");
@@ -331,6 +352,10 @@ if($mapped_data->{'url'}){
 	$mapped_data->{'url'}=~s/\|$//;	#sometimes CDS leaves a trailing delimiter that must be removed
 	$mapped_data->{'url'}=~s/,$//;	#to my knowledge nothing downstream does this, but might as well check it anyway...
 	$mapped_data->{'format'}=get_mimetype($mapped_data->{'url'});
+	if(not defined $mapped_data->{'format'}){
+		print "-ERROR: Unable to retrieve information for ".$mapped_data->{'url'}."\n";
+		goto done;
+	}
 }
 
 if(not $mapped_data->{'vbitrate'}=~/^\d+$/ or $mapped_data->{'vbitrate'}<1){
@@ -340,8 +365,15 @@ if(not $mapped_data->{'vbitrate'}=~/^\d+$/ or $mapped_data->{'vbitrate'}<1){
 $mapped_data->{'contentid'}=$contentid;
 my $r=add_encoding($mapped_data);
 
+my $filename;
+foreach(@filename_fields){
+    $filename=$metadata->{'meta'}->{$_};
+    last if($filename);
+}
+
+done:
 if($r){
-	log_success($logid,"SUCCESS: Completed run to add an encoding of type '".$mapped_data->{'format'}."' of file '".$metadata->{'meta'}->{'filename'}."' under id ".$contentid." to the database.\n");
+	log_success($logid,"SUCCESS: Completed run to add an encoding of type '".$mapped_data->{'format'}."' of file '".$filename."' under id ".$contentid." to the database.\n");
 } else {
 	error($logid,"ERROR: Unable to add ".$metadata->{'meta'}->{'filename'}." as a new record under id ".$contentid." to the database.\n");
 }

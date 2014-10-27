@@ -242,6 +242,7 @@ table.items.each do |item|
 end
 
 responders.each {|resp|
+	puts "checking threads..."
 	resp.join
 }
 
