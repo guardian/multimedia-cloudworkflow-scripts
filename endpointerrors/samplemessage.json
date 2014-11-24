@@ -1,0 +1,12 @@
+{
+  "Type" : "Notification",
+  "MessageId" : "a70988c0-9749-5454-9313-c42b593131fd",
+  "TopicArn" : "arn:aws:sns:eu-west-1:855023211239:EndpointNotifications",
+  "Subject" : "Endpoint Error",
+  "Message" : "{\"status\":\"error\",\"detail\":{\"error_code\":404,\"error_string\":\"No matching encodings found\",\"total_encodings_searched\":5,\"file_name\":\"141123Arsenal\",\"title_id\":\"\\/asset\\/815470\",\"octopus_id\":null,\"query_url\":\"\\/interactivevideos\\/video.php?file=141123Arsenal&format=video\\/dahj\"},\"hostname\":null}",
+  "Timestamp" : "2014-11-23T11:59:52.942Z",
+  "SignatureVersion" : "1",
+  "Signature" : "p2GylU8MUBHB7CakqLUuT1U9ZSd+bgU59M/Y3dCYDjmiKNvH/lNrT2o8jhmfM3CQ7VR2UMdILENvIEHRvO+BmQJPRQpvfwKcNmV9wesiu3CX31FWP7g9CwR618JNqKi0ATuks9ebH2qQll6dvIF3NkhTekyJHO3xEcfIhXfNDdX4gUc0fi2ZYD/vUAk+5KJc/opK7a7/f+YIGnIXX3dO164VPLL9mwLa72jeTpkon9Z5lF68ewfHIrFfSc16gI4AmZTOhnBG9naywn2dLBnqtOkintttD06FmyfgQIuZUY+q+VpFi9lzq62NGxIbZ9uNKQmZ000K9BX60Y9HbPHvpA==",
+  "SigningCertURL" : "https://sns.eu-west-1.amazonaws.com/SimpleNotificationService-d6d679a1d18e95c2f9ffcf11f4f9e198.pem",
+  "UnsubscribeURL" : "https://sns.eu-west-1.amazonaws.com/?Action=Unsubscribe&SubscriptionArn=arn:aws:sns:eu-west-1:855023211239:EndpointNotifications:ab8783dc-321d-47aa-b99e-b686e6f0408b"
+}
