@@ -1,5 +1,7 @@
 #!/usr/bin/perl
 
+my $version='$Rev$ $LastChangedDate$';
+
 use Getopt::Long;
 use DBI;
 use Amazon::SNS;
@@ -9,6 +11,8 @@ use CSLogger;
 use Data::Dumper;
 use LWP::UserAgent;
 use File::Basename;
+
+my $title_id_field="octopus ID";
 
 our @filename_fields = qw/filename originalFilename/;
 
