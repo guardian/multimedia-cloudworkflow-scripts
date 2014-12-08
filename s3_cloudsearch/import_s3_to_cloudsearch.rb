@@ -90,16 +90,20 @@ csc= CloudSearchS3Committer.new(documentEndpoint)
 
 bucketref.objects.each do |obj|
 	puts "Got #{obj.key}"
+	pathComponents = obj.key.split("/")	#S3 always uses / even if we're on Windoze
 	data = {
 		'key'=>obj.key,
 		'size'=>obj.content_length,
 		'content_type'=>obj.content_type,
 		'last_modified'=>obj.last_modified.to_i,
 		'server_encryption'=>obj.server_side_encryption?,
-		'path_components'=>obj.key.split("/"),	#S3 always uses / even if we're on Windoze
+		'path_components'=>pathComponents,
 		'filename'=>File.basename(obj.key)
 	}
-	csc.addItem(obj.key,data)
+	itemName = pathComponents[-2] + '_' + pathComponents[-1]
+	itemName.gsub!(/[^a-zA-Z0-9\-\_\/\#\:\.\;\&\=\?\@\$\+\!\*'\(\)\,\%]/,'_') #ensure that the document name is valid for CloudSearch
+	
+	csc.addItem(itemName,data)
 end #bucketref.objects each
 
 csc.commit()	#ensure anything uncommitted is sent
