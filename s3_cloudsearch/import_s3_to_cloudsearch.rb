@@ -14,7 +14,7 @@ def initialize(endpointname)
 	@awaitingCommitList = []
 	@awaitingCommitString = "["
 	
-	@csSizeLimit = 5 * (1024**2)
+	@csSizeLimit = 5 * (1024**1)
 end #def new
 
 def addItem(name,datahash)
