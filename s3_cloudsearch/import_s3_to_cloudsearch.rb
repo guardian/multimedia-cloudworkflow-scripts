@@ -14,7 +14,7 @@ def initialize(endpointname)
 	@awaitingCommitList = []
 	@awaitingCommitString = "["
 	
-	@csSizeLimit = 5 * (1024**1)
+	@csSizeLimit = 5 * (1024**2)
 end #def new
 
 def addItem(name,datahash)
@@ -73,7 +73,7 @@ end #def commit
 end #class CloudSearchCommitter
 
 #START MAIN
-bucketname = 'gnm-multimedia-archivedtech'
+bucketname = 'gnm-multimedia-loosearchive'
 region = 'eu-west-1'
 documentEndpoint = 'https://***REMOVED***.eu-west-1.cloudsearch.amazonaws.com'
 
@@ -100,7 +100,12 @@ bucketref.objects.each do |obj|
 		'path_components'=>pathComponents,
 		'filename'=>File.basename(obj.key)
 	}
-	itemName = pathComponents[-2] + '_' + pathComponents[-1]
+	itemName = ""
+	if(pathComponents.length > 2)
+		itemName = pathComponents[-2] + '_' + pathComponents[-1]
+	else
+		itemName = obj.key
+	end
 	itemName.gsub!(/[^a-zA-Z0-9\-\_\/\#\:\.\;\&\=\?\@\$\+\!\*'\(\)\,\%]/,'_') #ensure that the document name is valid for CloudSearch
 	
 	csc.addItem(itemName,data)
