@@ -9,22 +9,17 @@ class ConfigFile
 attr_accessor :var
 
 def initialize(filename)
-
-unless File.exists?(filename)
-	raise "Requested configuration file #{filename} does not exist."
-end
-
-@var={}
-
-File.open(filename,"r"){ |f|
-	f.each_line { |line|
-		row=line.match(/^(?<name>[^=]+)=(?<value>.*)$/)
-		@var[row['name']]=row['value']
+	unless File.exists?(filename)
+		raise "Requested configuration file #{filename} does not exist."
+	end
+	@var={}
+	File.open(filename,"r"){ |f|
+		f.each_line { |line|
+			row=line.match(/^(?<name>[^=]+)=(?<value>.*)$/)
+			@var[row['name']]=row['value']
+		}
 	}
-}
-
 end
-
 end
 
 class FinishedNotification
@@ -76,54 +71,51 @@ def initialize(arn,routename,arg,notification)
 end
 
 def GetUniqueFilename(path)
-filebase=@routename.gsub(/[^\w\d]/,"_")
-
-filename=path+'/'+filebase+".xml"
-
-n=0;
-while(Pathname(filename).exist?) do
-	n=n+1
-	filename=path+'/'+filebase+"-"+n.to_s()+".xml"
-end
-filename
+	filebase=@routename.gsub(/[^\w\d]/,"_")
+	filename=path+'/'+filebase+".xml"
+	n=0;
+	while(Pathname(filename).exist?) do
+		n=n+1
+		filename=path+'/'+filebase+"-"+n.to_s()+".xml"
+	end
+	filename
 end
 
 def GetRouteContent
-ddb=AWS::DynamoDB.new(:region=>$options[:region])
-table=ddb.tables[$cfg.var['routes-table']]
-table.hash_key=[ :routename,:string ]
-item=table.items[@routename]
-item.attributes['content']
-
+	ddb=AWS::DynamoDB.new(:region=>$options[:region])
+	table=ddb.tables[$cfg.var['routes-table']]
+	table.hash_key=[ :routename,:string ]
+	item=table.items[@routename]
+	item.attributes['content']
 end
 
 #Download the route name given from the DynamoDB table and return the local filename
 def DownloadRoute
-filename=GetUniqueFilename('/etc/cds_backend/routes')
-
-puts "Got filename #{filename} for route file\n"
-
-File.open(filename, 'w'){ |f|
-	f.write(GetRouteContent())
-}
-filename
+	filename=GetUniqueFilename('/etc/cds_backend/routes')
+	
+	puts "Got filename #{filename} for route file\n"
+	
+	File.open(filename, 'w'){ |f|
+		f.write(GetRouteContent())
+	}
+	filename
 end
 
 #Output the message as a trigger file
 def OutputTriggerFile(contents,id)
-
-File.open(id+".xml", 'w'){ |f|
-	f.write(contents)
-}
-id+".xml"
+	File.open(id+".xml", 'w'){ |f|
+		f.write(contents)
+	}
+	id+".xml"
 end
 
 def GetLogfile(name)
-filename = @logpath+"/"+name+".log"
-File.open(@logpath+"/"+name+".log", 'r'){ |f|
-	contents=f.read()
-}
-contents
+	#filename = @logpath+"/"+name+".log"
+	contents = ""
+	File.open(@logpath+"/"+name+".log", 'r'){ |f|
+		contents=f.read()
+	}
+	contents
 rescue
 	puts "Unable to read log from filename\n"
 end
@@ -149,6 +141,11 @@ while @isexecuting do
 	rescue Exception => e
 		puts e.message
 		puts e.backtrace.inspect
+		begin
+			@notification_topic.publish({'status'=>'error','message'=>e.message,'trace'=>e.backtrace}.to_json)
+		rescue Exception=>e
+			puts "Error passing on error message: #{e.message}"
+		end
 
 	ensure	
 		File.delete(triggerfile)
