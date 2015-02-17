@@ -123,7 +123,7 @@ end
 def ThreadFunc
 
 while @isexecuting do
-	@q.receive_message { |msg|
+	@q.poll { |msg|
 	begin #start a block to catch exceptions
 		#puts "Received message:\n";
 		#puts "\t#{msg.body}\n";
