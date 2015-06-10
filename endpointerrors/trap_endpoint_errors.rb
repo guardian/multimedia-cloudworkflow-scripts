@@ -5,10 +5,12 @@ require 'awesome_print'
 require 'aws-sdk-core'
 require 'uri'
 require 'cgi'
+require 'FileUtils'
 
 #global config
 $csEnd = '***REMOVED***'
 #document endpoint for cloudsearch domain
+$graveyard = "/mnt/trap_endpoint_errors/graveyard"
 #end
 
 class DocumentBatch
@@ -63,21 +65,28 @@ if(ARGV.length <1)
 	exit 1
 end
 
-rawdata = IO.read(ARGV[0])
-msgdata = JSON.parse(rawdata)
-ap msgdata
+begin
+	rawdata = IO.read(ARGV[0])
+	msgdata = JSON.parse(rawdata)
+	ap msgdata
 
-reportdata = JSON.parse(msgdata['Message'])
-reportdata['timestamp'] = msgdata['Timestamp']
+	reportdata = JSON.parse(msgdata['Message'])
+	reportdata['timestamp'] = msgdata['Timestamp']
 
-ap reportdata
+	ap reportdata
 
-db = DocumentBatch.new
-db.addDoc(reportdata,msgdata['MessageId'])
+	db = DocumentBatch.new
+	db.addDoc(reportdata,msgdata['MessageId'])
 
-$searchDomain = Aws::CloudSearchDomain::Client.new(endpoint: $csEnd)
-db.commit($searchDomain)
+	$searchDomain = Aws::CloudSearchDomain::Client.new(endpoint: $csEnd)
+	db.commit($searchDomain)
 
-reportdata = breakdown_report_data(reportdata)
-args = CGI::parse(reportdata['detail']['query_args'])
-ap args
+	reportdata = breakdown_report_data(reportdata)
+	args = CGI::parse(reportdata['detail']['query_args'])
+	ap args
+	File.unlink(ARGV[0])
+rescue StandardError=>e
+	puts "-ERROR: #{e.message}"
+	puts e.backtrace
+	FileUtils.mkdir_p($graveyard)
+	FileUtils.mv(ARGV[0],$graveyard)
