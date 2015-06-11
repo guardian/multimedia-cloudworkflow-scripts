@@ -5,7 +5,7 @@ require 'awesome_print'
 require 'aws-sdk-core'
 require 'uri'
 require 'cgi'
-require 'FileUtils'
+require 'fileutils'
 
 #global config
 $csEnd = '***REMOVED***'
@@ -24,9 +24,15 @@ def _compileHash(docdata,hashdata)
 			docdata=self._compileHash(docdata,v)
 		elsif v.is_a?(String) or v.is_a?(Array)
 			docdata['fields'][k]=v
+		elsif v.is_a?(Integer)
+			docdata['fields'][k]=v
 		else
 			docdata['fields'][k]=v.to_s
 		end
+	end
+	#ok this is ugly. Problem is that this comes in as a null - no data provided - but we don't intrinsically know whether thats a zero number or a zero string.
+	if not docdata['fields']['total_encodings_searched'].is_a?(Integer)
+		docdata['fields']['total_encodings_searched'] = 0
 	end
 	return docdata
 end
@@ -82,7 +88,11 @@ begin
 	db.commit($searchDomain)
 
 	reportdata = breakdown_report_data(reportdata)
-	args = CGI::parse(reportdata['detail']['query_args'])
+	if reportdata['detail']['query_args']
+		args = CGI::parse(reportdata['detail']['query_args'])
+	else
+		args = []
+	end
 	ap args
 	File.unlink(ARGV[0])
 rescue StandardError=>e
@@ -90,3 +100,4 @@ rescue StandardError=>e
 	puts e.backtrace
 	FileUtils.mkdir_p($graveyard)
 	FileUtils.mv(ARGV[0],$graveyard)
+end
