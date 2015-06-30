@@ -49,7 +49,7 @@ class EC2Meta
       data=f.read
       options=data.split("\n")
       @logger.debug("Got #{options}")
-      break if(not recurse)
+      return options if(not recurse)
 
       options.each {|opt|
 	next if(opt.nil?)
@@ -138,6 +138,7 @@ rescue Timeout::Error
   my_address=`hostname`.rstrip!
 rescue StandardError=>e
   logger.error("Unable to determine public hostname from EC2 metadata: #{e.message}")
+  logger.error(e.backtrace)
   my_address=`hostname`.rstrip!
 end
 
@@ -167,11 +168,14 @@ at_exit do
   sns.unsubscribe(:subscription_arn=>$subscription_arn)
 end
 
+my_endpoint = "http://#{opts.my_hostname}:#{opts.port}/messages"
+logger.info("Requesting subscription to own endpoint at #{my_endpoint}")
+
 response = sns.subscribe({
 	topic_arn: SNS_ARN,
 	protocol: "http",
 	#endpoint: "http://ec2-54-72-17-35.eu-west-1.compute.amazonaws.com:#{BIND_PORT}/messages"
-	endpoint: "http://#{opts['my_hostname']}:#{opts['port']}/messages"
+	endpoint: my_endpoint
 })
 #response = sns.confirm_subscription(:topic_arn=>"arn:aws:sns:eu-west-1:855023211239:***REMOVED***",
 #	:token=>response[:response_metadata][:request_id])
