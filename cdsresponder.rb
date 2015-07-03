@@ -5,22 +5,23 @@ require 'json'
 require 'optparse'
 require 'pp'
 require 'json'
+require 'raven'
 
 class ConfigFile
-attr_accessor :var
+    attr_accessor :var
 
-def initialize(filename)
-	unless File.exists?(filename)
-		raise "Requested configuration file #{filename} does not exist."
-	end
-	@var={}
-	File.open(filename,"r"){ |f|
-		f.each_line { |line|
-			row=line.match(/^(?<name>[^=]+)=(?<value>.*)$/)
-			@var[row['name']]=row['value']
-		}
-	}
-end
+    def initialize(filename)
+        unless File.exists?(filename)
+            raise "Requested configuration file #{filename} does not exist."
+        end
+        @var={}
+        File.open(filename,"r"){ |f|
+            f.each_line { |line|
+                row=line.match(/^(?<name>[^=]+)=(?<value>.*)$/)
+                @var[row['name']]=row['value']
+            }
+        }
+    end
 end
 
 class FinishedNotification
@@ -47,6 +48,7 @@ end
 class CDSResponder
 attr_accessor :url
 attr_accessor :isexecuting
+attr_accessor :should_finish
 
 def initialize(arn,routename,arg,notification)
 	@routename=routename
@@ -60,7 +62,8 @@ def initialize(arn,routename,arg,notification)
 	@sqs=AWS::SQS::new(:region=>'eu-west-1');
 	@q=@sqs.queues[@url]
 	@isexecuting=1;
-
+    @should_finish=false
+    
 	if notification!=nil 
 		@sns=AWS::SNS.new(:region=>'eu-west-1')
 		@notification_topic=@sns.topics[notification]
@@ -165,103 +168,106 @@ while @isexecuting do
 		File.delete(@routefile)
 	end	#end block to catch exceptions
 	}
-end
+end #while @isexecuting
 
-end
+end #def threadfunc
 
 def join
 @threadref.join
 #File.delete(@routefile)
-end
+end #def join
 
-end
+end #class CDSResponder
 
-begin
+### START MAIN
 
-#Process any commandline options
-$options={:configfile=>'/etc/cdsresponder.conf',:region=>'UNKNOWN'}
-OptionParser.new do |opts|
-	opts.banner="Usage: cdsresponder.rb [--config=/path/to/config.file] [--region=aws-region]"
+Raven.capture do
+    begin
+    #Process any commandline options
+    $options={:configfile=>'/etc/cdsresponder.conf',:region=>'UNKNOWN'}
+    OptionParser.new do |opts|
+        opts.banner="Usage: cdsresponder.rb [--config=/path/to/config.file] [--region=aws-region]"
 
-	opts.on("-c","--config CONFIGFILE", "Path to the configuration file.  This should contain the following:",
-				"   configuration-table={dynamodb table to use for configuration}",
-				"\troutes-table={dynamodb table to use for the routes content}",
-				"\tregion={AWS region to use for SQS and DynamoDB",
-				"\taccess-key={AWS access key} [Optional; default behaviour is to attempt connection via AWS roles",
-				"\tsecret-key={AWS secret key} [Optional; as above") do |cfg|
-		$options.configfile=cfg
-	end
-
-	opts.on("-r","--region [REGION]","AWS region to connect to") do |r|
-		$options.region=r
-	end
-
-end
-
-#Read in the configuration file.  cfg is declared as a global variable ($ prefix)
-begin
-	$cfg=ConfigFile.new($options[:configfile])
-rescue Exception=>e
-	puts "Unable to load configuration file: #{e.message}.  Please consult the documentation, the online cdsconfig configuration tool or run with the -h option, for more finformation"
-	exit 1
-end
-
-#If we still don't have a region to work in, use the default...
-if $options[:region] == 'UNKNOWN'
-	if $cfg.var['region']
-		$options[:region]=$cfg.var['region']
-	else
-		$options[:region]='eu-west-1'
-	end
-end
-
-puts "Commandline options:"
-p $options
-puts "Loaded config:"
-p $cfg
-
-sqs=AWS::SQS.new(:region=>$options[:region]);
-ddb=AWS::DynamoDB.new(:region=>$options[:region]);
-
-#table=ddb.tables['workflowmaster-cds-responder']
-table=ddb.tables[$cfg.var['configuration-table']]
-if !table or table==''
-	raise "Unable to connect to the table #{$cfg.var['configuration-table']}.  Has this been set up yet by the system administrator?"
-end
-
-table.hash_key = ['queue-arn',:string]
-
-responders = Array.new;
-
-table.items.each do |item|
-        begin
-	puts item.hash_value
-        item.attributes.each_key do |key|
-                puts "\t#{key} => #{item.attributes[key]}\n";
+        opts.on("-c","--config CONFIGFILE", "Path to the configuration file.  This should contain the following:",
+                    "   configuration-table={dynamodb table to use for configuration}",
+                    "\troutes-table={dynamodb table to use for the routes content}",
+                    "\tregion={AWS region to use for SQS and DynamoDB",
+                    "\taccess-key={AWS access key} [Optional; default behaviour is to attempt connection via AWS roles",
+                    "\tsecret-key={AWS secret key} [Optional; as above") do |cfg|
+            $options.configfile=cfg
         end
-	for i in 1..item.attributes['threads']
-		responder=CDSResponder.new(item.attributes['queue-arn'],item.attributes['route-name'],"--input-"+item.attributes['input-type'],item.attributes['notification'])
-		responders.push(responder);
-	end
 
-	rescue
-		puts "Responder failed to start up for this queue\n";
-		next 
-	puts responder.url
-	end
-end
+        opts.on("-r","--region [REGION]","AWS region to connect to") do |r|
+            $options.region=r
+        end
+    end #OptionParser
 
-responders.each {|resp|
-	puts "checking threads..."
-	resp.join
-}
+    #Read in the configuration file.  cfg is declared as a global variable ($ prefix)
+    begin
+        $cfg=ConfigFile.new($options[:configfile])
+    rescue Exception=>e
+        raise "Unable to load configuration file: #{e.message}.  Please consult the documentation, the online cdsconfig configuration tool or run with the -h option, for more information"
+        #Raven.capture_exception(e)
+        #exit 1
+    end
 
-#rescue
-#	print "Terminating program...\n"
-#ensure
-#	responders.each {|resp|
-#		resp.isexecuting=0
-#		resp.join
-#	}
-end
+    #If we still don't have a region to work in, use the default...
+    if $options[:region] == 'UNKNOWN'
+        if $cfg.var['region']
+            $options[:region]=$cfg.var['region']
+        else
+            $options[:region]='eu-west-1'
+        end
+    end
 
+    puts "Commandline options:"
+    p $options
+    puts "Loaded config:"
+    p $cfg
+
+    sqs=AWS::SQS.new(:region=>$options[:region]);
+    ddb=AWS::DynamoDB.new(:region=>$options[:region]);
+
+    #table=ddb.tables['workflowmaster-cds-responder']
+    table=ddb.tables[$cfg.var['configuration-table']]
+    if !table or table==''
+        raise "Unable to connect to the table #{$cfg.var['configuration-table']}.  Has this been set up yet by the system administrator?"
+    end
+
+    table.hash_key = ['queue-arn',:string]
+
+    responders = Hash.new;
+
+    table.items.each do |item|
+            begin
+        puts item.hash_value
+            item.attributes.each_key do |key|
+                    puts "\t#{key} => #{item.attributes[key]}\n";
+            end
+        for i in 1..item.attributes['threads']
+            responder=CDSResponder.new(item.attributes['queue-arn'],item.attributes['route-name'],"--input-"+item.attributes['input-type'],item.attributes['notification'])
+            #responders.push(responder);
+            responders[item.attributes['queue-arn']] = responder
+        end
+
+        rescue
+            puts "Responder failed to start up for this queue\n";
+            next 
+        puts responder.url
+        end
+    end
+
+    responders.each {|name,resp|
+        puts "checking threads..."
+        resp.join
+    }
+
+    #rescue
+    #	print "Terminating program...\n"
+    #ensure
+    #	responders.each {|resp|
+    #		resp.isexecuting=0
+    #		resp.join
+    #	}
+    end
+end #raven.capture
