@@ -141,8 +141,9 @@ while @isexecuting do
 			print "Message on queue is not JSON"
 			trigger_content=msg.body
 		end
-		
-		triggerfile=OutputTriggerFile(msg.body,msg.id)
+		puts trigger_content
+	
+		triggerfile=OutputTriggerFile(trigger_content,msg.id)
 		#FIXME: should not be using static db credentials! should be in dynamodb somewhere.
 		cmd=@commandline + triggerfile + " --logging-db=***REMOVED*** --db-host=***REMOVED*** --db-login=cdslogger --db-pass=***REMOVED*** --logging-id=#{msg.id}"
 		system(cmd)
