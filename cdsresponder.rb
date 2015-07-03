@@ -4,6 +4,7 @@ require 'aws-sdk'
 require 'json'
 require 'optparse'
 require 'pp'
+require 'json'
 
 class ConfigFile
 attr_accessor :var
@@ -130,6 +131,17 @@ while @isexecuting do
 		@routefile=DownloadRoute()
 		@commandline="cds_run --route \"#{@routefile}\" #{@cdsarg}="
 
+		trigger_content=msg.body
+		begin
+			jsonobject = JSON.parse(msg.body) #if we're subscribed to an SNS queue we get a JSON object
+			if jsonobject['Type'] == 'Notification'
+				trigger_content = jsonobject['Message']
+			end
+		rescue JSON::JSONError
+			print "Message on queue is not JSON"
+			trigger_content=msg.body
+		end
+		
 		triggerfile=OutputTriggerFile(msg.body,msg.id)
 		#FIXME: should not be using static db credentials! should be in dynamodb somewhere.
 		cmd=@commandline + triggerfile + " --logging-db=***REMOVED*** --db-host=***REMOVED*** --db-login=cdslogger --db-pass=***REMOVED*** --logging-id=#{msg.id}"
