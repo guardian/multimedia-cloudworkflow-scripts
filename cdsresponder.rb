@@ -7,6 +7,10 @@ require 'pp'
 require 'json'
 require 'raven'
 
+Raven.configure do |config|
+    config.dsn = "***REMOVED***"
+end
+
 class ConfigFile
     attr_accessor :var
 
