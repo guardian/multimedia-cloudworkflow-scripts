@@ -255,7 +255,7 @@ Raven.capture do
         end
 
         rescue
-            puts "Responder failed to start up for this queue\n";
+            puts "Responder failed to start up for #{item.attributes['queue-arn']}\n";
             next 
         puts responder.url
         end
