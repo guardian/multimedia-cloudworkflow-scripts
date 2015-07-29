@@ -6,8 +6,74 @@ require 'awesome_print'
 require 'date'
 require 'geoip'
 require 'logger'
+require 'elasticsearch'
+
+INDEXNAME='fastlylogs'
+TYPENAME="log"
 
 $logger=Logger.new(STDOUT)
+
+class ElasticIndexer
+  def initialize(client: nil,autocommit: 0)
+    @records = []
+    @autocommit_threshold = autocommit
+    if client
+      @client=client
+    else
+      @client=Elasticsearch::Client.new()
+    end
+  end #def initialize
+
+  def flatten_hash(h)
+    print "flatten_hash got:"
+    ap(h)
+    newhash={}
+    h.each do |k,v|
+      if v.is_a?(Hash)
+        v.each {|subkey,subval|
+          if subval.is_a?(Hash)
+            newhash[subkey]=flatten_hash(subval)
+          else
+            newhash[subkey]=subval
+          end
+        }
+        #h.delete(k)
+      else
+        newhash[k]=v
+      end
+    end
+    print "flatten_hash returned:"
+    ap(h)
+    return h
+  end #def flatten.hash
+  
+  def add_record(rec)
+    if rec.is_a?(Hash)
+      @records << self.flatten_hash(rec)
+    else
+      @records << rec
+    end
+    if @records.length > @autocommit_threshold
+      self.commit
+    end
+  end #def add_record
+  
+  def commit
+    actions = []
+    
+    @records.each do |rec|
+      actions << { index: {
+        _index: INDEXNAME,
+        _type: TYPENAME,
+        data: rec
+      }}
+    end
+    @client.bulk(body: actions)
+    @records = []
+  end #def commit
+  
+end #class ElasticIndexer
+
 def podcast_details(path)
   parts=path.split(/\//)
  
@@ -29,7 +95,7 @@ def podcast_details(path)
 
 end
 
-def parse_string(str)
+def parse_string(str,indexer: nil)
   #grok = Grok.new
   #grok.add_patterns_from_file('patterns/base')
   
@@ -54,18 +120,47 @@ def parse_string(str)
     rtn=Hash[match.names.zip(match.captures)]
     if rtn['datestamp']
       rtn['datestamp']=DateTime.parse(rtn['datestamp'])
+      rtn['@timestamp']=rtn['datestamp']
     end
-    rtn['target_details']=podcast_details(rtn['target'])
-    if g
-      rtn['client_country']=g.country(rtn['client'])
+    target_details=podcast_details(rtn['target'])
+    if target_details
+      target_details.each {|k,v|
+       rtn[k]=v  
+      }
     end
     
-    ap rtn
+    if g
+      countrydata=g.country(rtn['client'])
+      rtn['country_code']=countrydata[:country_code]
+      rtn['country_code2']=countrydata[:country_code2]
+      rtn['country_code3']=countrydata[:country_code3]
+      rtn['country_name']=countrydata[:country_name]
+      rtn['continent_code']=countrydata[:continent_code]
+    end
+    
+    indexer.add_record(rtn)
   }
+  indexer.commit
 end
 
 #START MAIN
 #parse_file(ARGV[0])
-File.open(ARGV[0]) do |f|
-  parse_string(f.read())
+
+ets = Elasticsearch::Client.new(hosts: ['dc1-workflow-01.dc1.gnm.int'],log: true)
+ets.cluster.health
+
+if ets.indices.exists?(index: INDEXNAME)
+  ets.indices.delete(index:INDEXNAME)
 end
+
+if not ets.indices.exists?(index: INDEXNAME)
+  ets.indices.create(index: INDEXNAME)
+end
+
+File.open(ARGV[0]) do |f|
+  parse_string(f.read(), indexer: ElasticIndexer.new(client:ets, autocommit:1000))
+end
+
+#test elasticsearch
+
+
