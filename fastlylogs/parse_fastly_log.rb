@@ -112,12 +112,21 @@ def parse_string(str,indexer: nil)
     g = nil
   end
   
+  begin
+    c = GeoIP.new('GeoLiteCity.dat')
+  rescue StandardError=>e
+    puts e.message
+    puts e.backtrace
+    c = nil
+  end
+  
   matcher = Regexp.new('(?<datestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z) (?<pop>[\w\d\-]+) (?<destination>[\w\d]+)\[(?<pid>\d+)\]: (?<client>\d+\.\d+\.\d+\.\d+) \".*\" \".*\" .* (?<verb>\w+) (?<target>[A-Za-z0-9$.+!*\'(){},~:;=@#%_\-\/]+) (?<response>\d+)$')
   str.split(/\n/).each {|line|
     puts line
     line.chomp!
     match=matcher.match(line)
     rtn=Hash[match.names.zip(match.captures)]
+    rtn['line']=line
     if rtn['datestamp']
       rtn['datestamp']=DateTime.parse(rtn['datestamp'])
       rtn['@timestamp']=rtn['datestamp']
@@ -138,6 +147,20 @@ def parse_string(str,indexer: nil)
       rtn['continent_code']=countrydata[:continent_code]
     end
     
+    if c
+      citydata=c.city(rtn['client'])
+      rtn['city_name']=citydata[:city_name]
+      rtn['postal_code']=citydata[:postal_code]
+      rtn['latitude']=citydata[:latitude]
+      rtn['longitude']=citydata[:longitude]
+      rtn['dma_code']=citydata[:dma_code]
+      rtn['area_code']=citydata[:area_code]
+      rtn['timezone']=citydata[:timezone]
+      rtn['region_name']=citydata[:real_region_name]
+      #ap citydata
+    end
+    
+    #raise StandardError, "Testing"
     indexer.add_record(rtn)
   }
   indexer.commit
@@ -158,7 +181,7 @@ if not ets.indices.exists?(index: INDEXNAME)
 end
 
 File.open(ARGV[0]) do |f|
-  parse_string(f.read(), indexer: ElasticIndexer.new(client:ets, autocommit:1000))
+  parse_string(f.read(), indexer: ElasticIndexer.new(client:ets, autocommit:500))
 end
 
 #test elasticsearch
