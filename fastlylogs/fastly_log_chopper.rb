@@ -216,7 +216,7 @@ if $opts[:queueurl]==nil
   exit(1)
 end
 
-ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: false)
+ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: true)
 ets.cluster.health
 
 if not ets.indices.exists?(index: INDEXNAME)
@@ -228,7 +228,7 @@ c=Aws::SQS::Client.new(region: $opts.region)
 Aws::SQS::QueuePoller.new($opts[:queueurl], {:client=>c}).poll do |msg|
   begin
     #puts msg
-    #$logger.debug("Got message #{msg.body}")
+    $logger.debug("Got message #{msg.body}")
     data=JSON.parse(msg.body)
     if not data['Event']
       data['Event']="new"
