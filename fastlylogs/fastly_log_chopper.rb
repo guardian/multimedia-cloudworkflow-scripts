@@ -130,7 +130,7 @@ def parse_string(str,indexer: nil)
     str=str.string
   end
   
-  matcher = Regexp.new('(?<datestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z) (?<pop>[\w\d\-]+) (?<destination>[\w\d]+)\[(?<pid>\d+)\]: (?<client>\d+\.\d+\.\d+\.\d+) \".*\" \".*\" .* (?<verb>\w+) (?<target>[A-Za-z0-9$.+!*\'(){},~:;=@#%_\-\/]+) (?<response>\d+)$')
+  matcher = Regexp.new('(?<datestamp>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z) (?<pop>[\w\d\-]+) (?<destination>[\w\d]+)\[(?<pid>\d+)\]: (?<client>\d+\.\d+\.\d+\.\d+) \".*\" \".*\" .* (?<verb>\w+) (?<target>[A-Za-z0-9$.+!*\'(){},~:;=@#%_\-\/?]+) (?<response>\d+)$')
   str.split(/\n/).each {|line|
     #puts line
     line.chomp!
