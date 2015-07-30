@@ -15,7 +15,8 @@ require 'json'
 INDEXNAME='fastlylogs'
 TYPENAME="log"
 
-$logger=Logger.new("/var/log/fastly_log_chopper.log")
+#$logger=Logger.new("/var/log/fastly_log_chopper.log")
+$logger=Logger.new(STDOUT)
 $logger.level=Logger::DEBUG
 
 class ElasticIndexer
@@ -53,7 +54,7 @@ class ElasticIndexer
   end #def flatten.hash
   
   def add_record(rec)
-    $logger.info("adding record")
+    #$logger.info("adding record")
     if rec.is_a?(Hash)
       @records << self.flatten_hash(rec)
     else
