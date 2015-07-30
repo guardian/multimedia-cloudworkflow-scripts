@@ -227,7 +227,7 @@ c=Aws::SQS::Client.new(region: $opts.region)
 
 Aws::SQS::QueuePoller.new($opts[:queueurl], {:client=>c}).poll do |msg|
   begin
-    puts msg
+    #puts msg
     #$logger.debug("Got message #{msg.body}")
     data=JSON.parse(msg.body)
     if not data['Event']
