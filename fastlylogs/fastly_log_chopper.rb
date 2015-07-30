@@ -1,7 +1,5 @@
 #!/usr/bin/env ruby
 
-#gem install jls-grok ffi
-#require 'grok'
 require 'awesome_print'
 require 'date'
 require 'geoip'
@@ -15,8 +13,8 @@ require 'json'
 INDEXNAME='fastlylogs'
 TYPENAME="log"
 
-#$logger=Logger.new("/var/log/fastly_log_chopper.log")
-$logger=Logger.new(STDOUT)
+$logger=Logger.new("/var/log/fastly_log_chopper.log")
+#$logger=Logger.new(STDOUT)
 $logger.level=Logger::DEBUG
 
 class ElasticIndexer
@@ -222,7 +220,35 @@ ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: tr
 ets.cluster.health
 
 if not ets.indices.exists?(index: INDEXNAME)
-  ets.indices.create(index: INDEXNAME)
+  ets.indices.create(index: INDEXNAME,body: {
+                      settings: {
+                        analysis: {
+                          analyzer: {
+                            path: {
+                              tokenizer: "path_hierarchy",
+                              type: "custom",
+                            }
+                          }
+                        }
+                      },
+                      mappings: {
+                        log: {
+                          properties: {
+                            pop: {type: "string", index: "not_analyzed"},
+                            city_name: {type: "string", index: "not_analyzed"},
+                            continent_code: {type: "string", index: "not_analyzed"},
+                            country_name: {type: "string", index: "not_analyzed"},
+                            client: {type: "ip"},
+                            filename: {type: "string", index: "not_analyzed"},
+                            postal_code: {type: "string", index: "not_analyzed"},
+                            region_name: {type: "string", index: "not_analyzed"},
+                            section: {type: "string", index: "not_analyzed"},
+                            series: {type: "string", index: "not_analyzed"},
+                            target: {type: "string", analyzer: "path"},
+                          }
+                        }
+                      }
+  })
 end
 
 c=Aws::SQS::Client.new(region: $opts.region)

@@ -177,7 +177,35 @@ if ets.indices.exists?(index: INDEXNAME)
 end
 
 if not ets.indices.exists?(index: INDEXNAME)
-  ets.indices.create(index: INDEXNAME)
+  ets.indices.create(index: INDEXNAME, body: {
+                      settings: {
+                        analysis: {
+                          analyzer: {
+                            path: {
+                              tokenizer: "path_hierarchy",
+                              type: "custom",
+                            }
+                          }
+                        }
+                      },
+                      mappings: {
+                        log: {
+                          properties: {
+                            pop: {type: "string", index: "not_analyzed"},
+                            city_name: {type: "string", index: "not_analyzed"},
+                            continent_code: {type: "string", index: "not_analyzed"},
+                            country_name: {type: "string", index: "not_analyzed"},
+                            client: {type: "ip"},
+                            filename: {type: "string", index: "not_analyzed"},
+                            postal_code: {type: "string", index: "not_analyzed"},
+                            region_name: {type: "string", index: "not_analyzed"},
+                            section: {type: "string", index: "not_analyzed"},
+                            series: {type: "string", index: "not_analyzed"},
+                            target: {type: "string", analyzer: "path"},
+                          }
+                        }
+                      }
+  })
 end
 
 File.open(ARGV[0]) do |f|
