@@ -53,6 +53,7 @@ class ElasticIndexer
   end #def flatten.hash
   
   def add_record(rec)
+    $logger.info("adding record")
     if rec.is_a?(Hash)
       @records << self.flatten_hash(rec)
     else
@@ -65,7 +66,7 @@ class ElasticIndexer
   
   def commit
     actions = []
-    
+    $logger.info("Committing to index #{INDEXNAME}...")
     @records.each do |rec|
       actions << { index: {
         _index: INDEXNAME,
@@ -235,9 +236,12 @@ Aws::SQS::QueuePoller.new($opts[:queueurl], {:client=>c}).poll do |msg|
     end
     case data['Event']
     when 'new'
+      $logger.info("Downloading #{data['Key']} from #{data['Bucket']}")
       content = download_from_s3(bucket: data['Bucket'],key: data['Key'])
       #raise StandardError, "Testing"
+      $logger.info("Parsing...")
       parse_string(content,indexer: ElasticIndexer.new(client: ets,autocommit: 500))
+      $logger.info("Done.")
     else
       $logger.error("Unknown event type #{data['Event']}")
     end

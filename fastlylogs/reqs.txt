@@ -1,1 +1,1 @@
-gem: grok
+sudo gem install geoip ffi aws-sdk-core aws-sdk-resources elasticsearch
