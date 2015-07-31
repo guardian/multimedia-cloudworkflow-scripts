@@ -164,8 +164,12 @@ def parse_string(str,indexer: nil)
       citydata=c.city(rtn['client'])
       rtn['city_name']=citydata[:city_name]
       rtn['postal_code']=citydata[:postal_code]
-      rtn['latitude']=citydata[:latitude]
-      rtn['longitude']=citydata[:longitude]
+      #rtn['latitude']=citydata[:latitude]
+      #rtn['longitude']=citydata[:longitude]
+      rtn['location'] = {
+        'lat' => citydata[:latitude],
+        'lon' => citydata[:longitude]
+      }
       rtn['dma_code']=citydata[:dma_code]
       rtn['area_code']=citydata[:area_code]
       rtn['timezone']=citydata[:timezone]
@@ -239,6 +243,7 @@ if not ets.indices.exists?(index: INDEXNAME)
                             continent_code: {type: "string", index: "not_analyzed"},
                             country_name: {type: "string", index: "not_analyzed"},
                             client: {type: "ip"},
+                            location: {type: "geo_point"},
                             filename: {type: "string", index: "not_analyzed"},
                             postal_code: {type: "string", index: "not_analyzed"},
                             region_name: {type: "string", index: "not_analyzed"},
