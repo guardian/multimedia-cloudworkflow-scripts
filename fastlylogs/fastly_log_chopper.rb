@@ -100,7 +100,7 @@ def podcast_details(path)
 
 end
 
-def parse_string(str,indexer: nil)
+def parse_string(str,extra_data: {}, indexer: nil)
   #grok = Grok.new
   #grok.add_patterns_from_file('patterns/base')
   
@@ -177,6 +177,7 @@ def parse_string(str,indexer: nil)
       #ap citydata
     end
     
+    rtn.merge!(extra_data)
     #raise StandardError, "Testing"
     indexer.add_record(rtn)
   }
@@ -270,9 +271,14 @@ Aws::SQS::QueuePoller.new($opts[:queueurl], {:client=>c}).poll do |msg|
     when 'new'
       $logger.info("Downloading #{data['Key']} from #{data['Bucket']}")
       content = download_from_s3(bucket: data['Bucket'],key: data['Key'])
+      domain = data['Key'].split(/\//)[0]
+      if domain == "" #leading / confuses things somewhat
+        domain = data['Key'].split(/\//)[1]
+      end
+      
       #raise StandardError, "Testing"
       $logger.info("Parsing...")
-      parse_string(content,indexer: ElasticIndexer.new(client: ets,autocommit: 500))
+      parse_string(content,extra_data: {'domain' => domain}, indexer: ElasticIndexer.new(client: ets,autocommit: 500))
       $logger.info("Done.")
     else
       $logger.error("Unknown event type #{data['Event']}")
