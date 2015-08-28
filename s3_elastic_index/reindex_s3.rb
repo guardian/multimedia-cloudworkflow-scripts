@@ -90,7 +90,7 @@ end #class ElasticIndexer
 def process_bucket(bucketname,options: {},logger: Logger.new(LOGFILE))
   
   client = Elasticsearch::Client.new(host: options.elasticsearch, log: false)
-  indexer = ElasticIndexer.new(client: client, autocommit: 2000,logger: logger)
+  indexer = ElasticIndexer.new(client: client, autocommit: 500,logger: logger)
   
   logger.info("Scanning #{bucketname}")
   Aws::S3::Bucket.new(bucketname).objects.each {|objectsummary|
@@ -276,6 +276,7 @@ end
 
 s3_client = Aws::S3::Client.new
 s3_client.list_buckets.buckets.each {|bucketname|
+  logger.info("adding #{bucketname.name} to list")
   queue << bucketname 
 }
 
