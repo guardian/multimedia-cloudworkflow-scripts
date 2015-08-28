@@ -90,7 +90,7 @@ end #class ElasticIndexer
 def process_bucket(bucketname,options: {},logger: Logger.new(LOGFILE))
   
   client = Elasticsearch::Client.new(host: options.elasticsearch, log: false)
-  indexer = ElasticIndexer.new(client: client, autocommit: 200,logger: logger)
+  indexer = ElasticIndexer.new(client: client, autocommit: 2000,logger: logger)
   
   logger.info("Scanning #{bucketname}")
   Aws::S3::Bucket.new(bucketname).objects.each {|objectsummary|
@@ -104,6 +104,13 @@ def process_bucket(bucketname,options: {},logger: Logger.new(LOGFILE))
     else
       logger.warn("Unable to parse content type '#{objectsummary.object.content_type}'")
     end
+    
+    xtn = ""
+    parts = /\.([^\.]+)$/.match(objectsummary.key)
+    if parts
+      xtn = parts[1]
+    end
+    
     ap objectsummary.object.metadata
     
     indexer.add_record({
@@ -124,9 +131,11 @@ def process_bucket(bucketname,options: {},logger: Logger.new(LOGFILE))
       storage_class: objectsummary.storage_class,
       content_encoding: objectsummary.object.content_encoding,
       content_disposition: objectsummary.object.content_disposition,
-      extra_data: objectsummary.object.metadata
+      extra_data: objectsummary.object.metadata,
+      file_extension: xtn
     })
   }
+  indexer.commit
 rescue Aws::S3::Errors::PermanentRedirect=>e
   logger.error(e.message)
 end
@@ -239,6 +248,10 @@ if not client.indices.exists?(index: INDEXNAME)
                                     analyzer: "mime_analyzer"
                                   }
                                 }
+                              },
+                              file_extension: {
+                                type: "string",
+                                index: "not_analyzed"
                               }
                             }
                           }
