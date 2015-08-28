@@ -18,7 +18,7 @@ class ElasticIndexer
     
     @logger=logger
     @logger.formatter = proc do |severity, datetime, progname, msg|
-      "#{datetime}: #{severity} [#{progname}] [ElasticIndexer] thread: #{Thread.current.object_id}: #{msg}"
+      "#{datetime}: #{severity} [ElasticIndexer] thread: #{Thread.current.object_id}: #{msg}\n"
     end
     
     if client
@@ -89,8 +89,8 @@ end #class ElasticIndexer
 #this is called in a subthread to process a bucket's worth of stuff
 def process_bucket(bucketname,options: {},logger: Logger.new(LOGFILE))
   
-  client = Elasticsearch::Client.new(host: options.elasticsearch, log: true)
-  indexer = ElasticIndexer.new(client: client, autocommit: 5,logger: logger)
+  client = Elasticsearch::Client.new(host: options.elasticsearch, log: false)
+  indexer = ElasticIndexer.new(client: client, autocommit: 200,logger: logger)
   
   logger.info("Scanning #{bucketname}")
   Aws::S3::Bucket.new(bucketname).objects.each {|objectsummary|
@@ -101,14 +101,20 @@ def process_bucket(bucketname,options: {},logger: Logger.new(LOGFILE))
     if parts
       ct_major = parts[1]
       ct_minor = parts[2]
+    else
+      logger.warn("Unable to parse content type '#{objectsummary.object.content_type}'")
     end
+    ap objectsummary.object.metadata
     
     indexer.add_record({
       bucket: bucketname,
       etag: objectsummary.etag,
       path: objectsummary.key,
       last_modified: Date.parse(objectsummary.last_modified.to_s).iso8601,
-      owner: objectsummary.owner,
+      owner: {
+        display_name: objectsummary.owner.display_name,
+        id: objectsummary.owner.id
+      },
       size: objectsummary.size,
       content_type: {
         major: ct_major,
@@ -117,21 +123,22 @@ def process_bucket(bucketname,options: {},logger: Logger.new(LOGFILE))
       },
       storage_class: objectsummary.storage_class,
       content_encoding: objectsummary.object.content_encoding,
-      content_disposition: objectsummary.object.content_disposition
+      content_disposition: objectsummary.object.content_disposition,
+      extra_data: objectsummary.object.metadata
     })
   }
 end
 
 #START MAIN
 logger = Logger.new(STDOUT)
-logger.level = Logger::DEBUG
+logger.level = Logger::INFO
 
 opts = Trollop::options do
   opt :elasticsearch, "host:port for elasticsearch cluster", :default=>"localhost:9200"
   opt :threads, "number of buckets to scan in parallel", :default=>5
 end
 
-client = Elasticsearch::Client.new(host: opts.elasticsearch, log: true)
+client = Elasticsearch::Client.new(host: opts.elasticsearch, log: false)
 
 if not client.indices.exists?(index: INDEXNAME)
   logger.info("Index #{INDEXNAME} does not exist, creating...")
@@ -177,8 +184,18 @@ if not client.indices.exists?(index: INDEXNAME)
                                 type: "date"
                               },
                               owner: {
-                                type: "string",
-                                index: "not_analyzed"
+                                type: "object",
+                                properties: {
+                                  display_name: {
+                                    type: "string",
+                                    index: "not_analyzed"
+                                  },
+                                  id: {
+                                    type: "string",
+                                    index: "not_analyzed"
+                                  }
+                                }
+                                
                               },
                               size: {
                                 type: "long"
@@ -211,6 +228,15 @@ if not client.indices.exists?(index: INDEXNAME)
                               content_disposition: {
                                 type: "string",
                                 index: "not_analyzed"
+                              },
+                              extra_data: {
+                                type: "object",
+                                properties: {
+                                  "s3cmd-attrs"=>{
+                                    type: "string",
+                                    analyzer: "mime_analyzer"
+                                  }
+                                }
                               }
                             }
                           }
@@ -219,4 +245,32 @@ if not client.indices.exists?(index: INDEXNAME)
   )
 end
 
-process_bucket("gnm-multimedia-loosearchive", options: opts, logger: logger)
+threads = []
+queue = Queue.new()
+opts.threads.times do
+  threads << Thread.new {
+    while true do
+      bucket = queue.deq
+      if bucket==nil
+        break
+      end
+      process_bucket(bucket.name, options: opts, logger: logger)
+    end
+  }
+end
+
+s3_client = Aws::S3::Client.new
+s3_client.list_buckets.buckets.each {|bucketname|
+  queue << bucketname 
+}
+
+opts.threads.times do
+  queue << nil
+end
+
+logger.info("Waiting for threads to terminate...")
+threads.each do |t|
+  t.join()
+end
+
+#process_bucket("gnm-multimedia-loosearchive", options: opts, logger: logger)
