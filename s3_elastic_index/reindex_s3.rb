@@ -127,6 +127,8 @@ def process_bucket(bucketname,options: {},logger: Logger.new(LOGFILE))
       extra_data: objectsummary.object.metadata
     })
   }
+rescue Aws::S3::Errors::PermanentRedirect=>e
+  logger.error(e.message)
 end
 
 #START MAIN
