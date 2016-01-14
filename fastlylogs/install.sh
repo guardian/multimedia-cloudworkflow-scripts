@@ -5,7 +5,7 @@ echo "Installer for Fastly logchopper"
 echo "-------------------------------------------"
 
 echo "Checking ruby requirements..."
-apt-get -y install ruby2.0 ruby-2.0-dev
+apt-get -y install ruby2.0 ruby2.0-dev
 
 echo "-------------------------------------------"
 echo "Installing gems"
@@ -30,9 +30,9 @@ INSTALL_PREFIX="/usr/local"
 install -bpcv -m ${SCRIPT_MODE} -o ${OWNER} -g ${GROUP} fastly_log_chopper.rb ${INSTALL_PREFIX}/bin
 install -bpcv -m ${CONFIG_MODE} -o ${OWNER} -g ${GROUP} GeoIP.dat ${INSTALL_PREFIX}/bin
 install -bpcv -m ${CONFIG_MODE} -o ${OWNER} -g ${GROUP} GeoLiteCity.dat ${INSTALL_PREFIX}/bin
-install -bpcv -m ${CONFIG_MODE} -o ${OWNER} -g ${GROUP} upstart.conf /etc/init/fastly_logchopper.conf
+install -bpcv -m ${CONFIG_MODE} -o ${OWNER} -g ${GROUP} upstart.conf /etc/init/fastly-logchopper.conf
 
 echo "-------------------------------------------"
 echo "Starting up"
 echo "-------------------------------------------"
-initctl start fastly_logchopper
+initctl start fastly-logchopper

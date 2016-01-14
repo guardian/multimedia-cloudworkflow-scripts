@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require 'aws-sdk';
+require 'aws-sdk-v1';
 
 def usage
 	puts "Put the given autoscaling group into 'weekend mode', i.e. set the minimum capacity to zero.  Desired capacity is left as-is in case a job is still in progress"

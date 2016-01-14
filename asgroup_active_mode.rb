@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 
-require 'aws-sdk';
+require 'aws-sdk-v1';
 
 def usage
 	puts "Put the given autoscaling group into 'active mode', i.e. set the minimum and desired capacity to one."
