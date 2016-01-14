@@ -8,6 +8,7 @@ my $version='$Rev: 1068 $ $LastChangedDate: 2014-10-02 18:28:37 +0100 (Thu, 02 O
 use Getopt::Long;
 use CDS::DBLogger;
 use DBI;
+use DateTime;
 
 our $configFileLocation="/etc/cds_backend.conf";
 our $dbh;
@@ -47,12 +48,22 @@ my $expiryThreshold=shift;
 
 my @results;
 #Note - will only work with postgres i think.
-my $sth=$dbh->prepare("select * from jobs where created < now() - interval \'$expiryThreshold days\' order by created asc");
+my $sth;
+if($dbDriver=="mysql"){
+	my $dt=DateTime->now - DateTime::Duration->new(days=>$expiryThreshold);
+	my $date_str = sprintf("%04d-%02d-%02d",$dt->year,$dt->month,$dt->day);
+	print "Searching for records earlier that $date_str\n";
+#	print "Query is select * from jobs where created < $date_str order by created asc";
+        $sth=$dbh->prepare("select * from jobs where created < '$date_str' order by created asc");
+} else {
+        $sth=$dbh->prepare("select * from jobs where created < now() - interval \'$expiryThreshold days\' order by created asc");
+}
 $sth->execute();
 
 while($data = $sth->fetchrow_hashref){
 	push @results,$data;
 }
+
 
 return @results;
 }
