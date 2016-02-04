@@ -92,6 +92,11 @@ def podcast_details(path)
     type=m.captures[0]
   end
   
+  [3, 5, 8].each do |n|
+    #if any of these key components are numbers only, then it's not a podcast.
+    return nil if /^[\s\d]+$/.match(parts[n])
+  end
+  
   begin
     {'section'=>parts[3],'series'=>parts[5],'filename'=>parts[8],'type'=>type}
   rescue StandardError=>e
@@ -144,6 +149,12 @@ def parse_string(str,extra_data: {}, indexer: nil)
       rtn['datestamp']=DateTime.parse(rtn['datestamp'])
       rtn['@timestamp']=rtn['datestamp']
     end
+    
+    d=/\.([^\.]+)$/.match(rtn['target'])
+    if d
+      rtn['file_extension']=d[1]
+    end
+    
     target_details=podcast_details(rtn['target'])
     if target_details
       target_details.each {|k,v|
@@ -251,6 +262,7 @@ if not ets.indices.exists?(index: INDEXNAME)
                             section: {type: "string", index: "not_analyzed"},
                             series: {type: "string", index: "not_analyzed"},
                             target: {type: "string", analyzer: "path"},
+                            file_extension {type: "string", index: "not_analyzed"}
                           }
                         }
                       }
