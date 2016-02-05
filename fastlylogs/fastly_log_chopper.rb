@@ -262,7 +262,7 @@ if not ets.indices.exists?(index: INDEXNAME)
                             section: {type: "string", index: "not_analyzed"},
                             series: {type: "string", index: "not_analyzed"},
                             target: {type: "string", analyzer: "path"},
-                            file_extension {type: "string", index: "not_analyzed"}
+                     file_extension: {type: "string", index: "not_analyzed"}
                           }
                         }
                       }
