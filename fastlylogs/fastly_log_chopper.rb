@@ -122,8 +122,10 @@ def video_details(target_url)
         if(parts[2] == "m3u8") #these have extra tokens
             rtn['encoding_type']='HLS'
             if(filename_tokens[-1].match(/\d+[mMkK]{0,1}/)) #this has a bitrate specifier so is a submanifest
+                $logger.debug("Filename final token '#{filename_tokens[-1]}' matches (digit[m,k]*) so this is a submanifest")
                rtn['manifest_type'] = 'submanifest'
             else
+            $logger.debug("Filename final token '#{filename_tokens[-1]}' does not match (digit[m,k]*) so this is a main manifest")
                rtn['manifest_type'] = 'master'
             end
         else
