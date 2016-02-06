@@ -64,6 +64,10 @@ class ElasticIndexer
   
   def commit
     actions = []
+    if(@records.count==0)
+        $logger.info("No records left to commit to #{INDEXNAME}!")
+        return
+    end
     $logger.info("Committing to index #{INDEXNAME}...")
     @records.each do |ent|
         rec = ent[0]
@@ -108,6 +112,27 @@ def podcast_details(path)
 
 end
 
+def get_quoted_bitrate(number,specifier)
+    if not number.is_a?(Numeric)
+        raise ArgumentError, "Number must be a numeric argument!"
+    end
+    
+    multiplier = 1
+    case specifier.downcase
+        when ''
+            multiplier = 1
+        when 'b'
+            multiplier = 1
+        when 'k'
+            multiplier = 1024
+        when 'm'
+            multiplier = 1048576
+       else
+            raise ArgumentError, "specifier #{specifier} is not recognised. Should be 'b', 'k', or 'm'."
+    end #case
+    return number*multiplier
+end #def get_quoted_bitrate
+
 def video_details(target_url)
     base = File.basename(target_url)
     #remove any url args
@@ -121,16 +146,24 @@ def video_details(target_url)
         filename_tokens = parts[1].split(/_/)
         if(parts[2] == "m3u8") #these have extra tokens
             rtn['encoding_type']='HLS'
-            if(filename_tokens[-1].match(/\d+[mMkK]{0,1}/)) #this has a bitrate specifier so is a submanifest
+            parts_match = filename_tokens[-1].match(/(\d+)([bBmMkKgG])$/)
+            if(parts_match) #this has a bitrate specifier so is a submanifest
                 $logger.debug("Filename final token '#{filename_tokens[-1]}' matches (digit[m,k]*) so this is a submanifest")
                rtn['manifest_type'] = 'submanifest'
+               begin
+                   rtn['quoted_bitrate'] = get_quoted_bitrate(parts_match[1].to_i,parts_match[2])
+               rescue ArgumentError=>e
+                   $logger.warn(e.message)
+               end #exception block
             else
             $logger.debug("Filename final token '#{filename_tokens[-1]}' does not match (digit[m,k]*) so this is a main manifest")
                rtn['manifest_type'] = 'master'
-            end
+            end #if(parts_match)
+        elsif(parts[2] == "ts")
+            rtn['encoding_type'] = "HLScomponent"
         else
             rtn['encoding_type'] = filename_tokens[-1]
-        end
+        end #if(parts[2] == "m3u8")
      end #if(parts)
     return nil if(rtn.count==0)
     return rtn
@@ -268,6 +301,7 @@ $opts = Trollop::options do
   opt :region, "AWS region to operate in", :type=>:string, :default=>"eu-west-1"
   opt :testfile, "Test run on the provided file", :type=>:string
   opt :reindex_bucket, "Re-index from the specified bucket", :type=>:string
+  opt :reindex_prefix, "If --reindex-bucket is specified, limit the search to files with this prefix", :type=>:string
 end
 
 if($opts.testfile)
@@ -282,7 +316,7 @@ end
 
 $logger=Logger.new(LOGFILE)
 #$logger=Logger.new(STDOUT)
-$logger.level=Logger::DEBUG
+$logger.level=Logger::INFO
 
 ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: true)
 ets.cluster.health
@@ -326,17 +360,27 @@ if($opts.reindex_bucket)
     s3 = Aws::S3::Client.new(region: $opts.region)
     b = Aws::S3::Bucket.new($opts.reindex_bucket, client: s3)
     
-    b.objects.each do |obj|
-        content = download_from_s3(bucket: $opts.reindex_bucket,key: obj.key)
-        domain = obj.key.split(/\//)[0]
-        if domain == "" #leading / confuses things somewhat
-            domain = obj.key.split(/\//)[1]
-        end
-        
-        #raise StandardError, "Testing"
-        $logger.info("Parsing...")
-        parse_string(content,extra_data: {'domain' => domain}, indexer: ElasticIndexer.new(client: ets,autocommit: 500))
-        $logger.info("Done.")
+    args = {}
+    if($opts.reindex_prefix)
+        $logger.info("Doing partial reindex with prefix #{$opts.reindex_prefix}")
+        args[:prefix] = $opts.reindex_prefix
+    end
+    b.objects(args).each do |obj|
+        begin
+            content = download_from_s3(bucket: $opts.reindex_bucket,key: obj.key)
+            domain = obj.key.split(/\//)[0]
+            if domain == "" #leading / confuses things somewhat
+                domain = obj.key.split(/\//)[1]
+            end
+            
+            #raise StandardError, "Testing"
+            $logger.info("Parsing...")
+            parse_string(content,extra_data: {'domain' => domain}, indexer: ElasticIndexer.new(client: ets,autocommit: 500))
+            $logger.info("Done.")
+        rescue StandardError=>e
+            $logger.error(e.message)
+            $logger.error(e.backtrace)
+        end #exception block
     end #b.objects.each
     exit(0)
 end
