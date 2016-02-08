@@ -355,6 +355,16 @@ if not ets.indices.exists?(index: INDEXNAME)
                        })
 end
 
+action = "listen"
+action = "send" if($opts.reindex_bucket)
+
+if $opts[:queueurl]==nil
+  $logger.error("You need to specify a queue to #{action} to using --queueurl")
+  exit(1)
+end
+
+c=Aws::SQS::Client.new(region: $opts.region)
+
 if($opts.reindex_bucket)
     $logger.info("Attempting re-index from #{$opts.reindex_bucket}")
     s3 = Aws::S3::Client.new(region: $opts.region)
@@ -367,30 +377,20 @@ if($opts.reindex_bucket)
     end
     b.objects(args).each do |obj|
         begin
-            content = download_from_s3(bucket: $opts.reindex_bucket,key: obj.key)
-            domain = obj.key.split(/\//)[0]
-            if domain == "" #leading / confuses things somewhat
-                domain = obj.key.split(/\//)[1]
-            end
-            
-            #raise StandardError, "Testing"
-            $logger.info("Parsing...")
-            parse_string(content,extra_data: {'domain' => domain}, indexer: ElasticIndexer.new(client: ets,autocommit: 500))
-            $logger.info("Done.")
-        rescue StandardError=>e
-            $logger.error(e.message)
-            $logger.error(e.backtrace)
+            $logger.info("Reindex: enqueueing #{obj.key} from #{$opts.reindex_bucket}")
+            msg = JSON.dump({
+              'Event'=>'new',
+              'Bucket'=>$opts.reindex_bucket,
+              'Key'=>obj.key
+            })
+            c.send_message({
+                           queue_url: $opts[:queueurl],
+                           message_body: msg
+            })
         end #exception block
     end #b.objects.each
     exit(0)
 end
-
-if $opts[:queueurl]==nil
-  $logger.error("You need to specify a queue to listen to using --queueurl")
-  exit(1)
-end
-
-c=Aws::SQS::Client.new(region: $opts.region)
 
 Aws::SQS::QueuePoller.new($opts[:queueurl], {:client=>c}).poll do |msg|
   begin
@@ -403,17 +403,21 @@ Aws::SQS::QueuePoller.new($opts[:queueurl], {:client=>c}).poll do |msg|
     case data['Event']
     when 'new'
       $logger.info("Downloading #{data['Key']} from #{data['Bucket']}")
-      content = download_from_s3(bucket: data['Bucket'],key: data['Key'])
-      domain = data['Key'].split(/\//)[0]
-      if domain == "" #leading / confuses things somewhat
-        domain = data['Key'].split(/\//)[1]
-      end
-      
-      #raise StandardError, "Testing"
-      $logger.info("Parsing...")
-      parse_string(content,extra_data: {'domain' => domain}, indexer: ElasticIndexer.new(client: ets,autocommit: 500))
-      $logger.info("Done.")
-    else
+      if data['Key'].end_with?('.gz')
+          $logger.error("I can't process gzip files, ignoring.")
+      else
+          content = download_from_s3(bucket: data['Bucket'],key: data['Key'])
+          domain = data['Key'].split(/\//)[0]
+          if domain == "" #leading / confuses things somewhat
+            domain = data['Key'].split(/\//)[1]
+          end
+          
+          #raise StandardError, "Testing"
+          $logger.info("Parsing...")
+          parse_string(content,extra_data: {'domain' => domain}, indexer: ElasticIndexer.new(client: ets,autocommit: 500))
+          $logger.info("Done.")
+      end #if data['Key'].end_with?
+    else #case data['Event']
       $logger.error("Unknown event type #{data['Event']}")
     end
   rescue StandardError=>e
