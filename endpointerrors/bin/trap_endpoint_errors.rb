@@ -3,15 +3,25 @@
 require 'json'
 require 'awesome_print'
 require 'aws-sdk-core'
+require 'aws-sdk-resources'
 require 'uri'
 require 'cgi'
 require 'fileutils'
+require 'logger'
 
 #global config
+$queueURL = 'https://sqs.eu-west-1.amazonaws.com/855023211239/GNM_MM_EndpointError'
 $csEnd = '***REMOVED***'
+$amzRegion = 'eu-west-1'
 #document endpoint for cloudsearch domain
 $graveyard = "/mnt/trap_endpoint_errors/graveyard"
 #end
+
+$log = Logger.new('/var/log/trap_endpoint_errors.log')
+
+if not ENV['AWS_REGION']
+	ENV['AWS_REGION'] = $amzRegion
+end
 
 class DocumentBatch
 def initialize
@@ -49,9 +59,11 @@ end #def addDoc
 
 def commit(searchdomain) #searchdomain should be an Aws::CloudSearchDomain::Client
 	jsondata = @docs.to_json
-	ap @docs
-	puts jsondata
+	$log.info("Committing #{@docs.count} documents to index #{$csEnd}")
+	#ap @docs
+	#puts jsondata
 	searchdomain.upload_documents(documents: jsondata,content_type: 'application/json')
+	$log.info("Commit done")
 end
 
 end #class documentBatch
@@ -65,39 +77,44 @@ def breakdown_report_data(data)
 end #def breakdown_report_data
 
 #START MAIN
-if(ARGV.length <1)
-	puts "Processes error reports from the interactive endpoint"
-	puts "Usage: trap_endpoint_errors {report.json}"
-	exit 1
-end
-
 begin
-	rawdata = IO.read(ARGV[0])
-	msgdata = JSON.parse(rawdata)
-	ap msgdata
-
-	reportdata = JSON.parse(msgdata['Message'])
-	reportdata['timestamp'] = msgdata['Timestamp']
-
-	ap reportdata
-
-	db = DocumentBatch.new
-	db.addDoc(reportdata,msgdata['MessageId'])
-
+	#if not Dir.exists?($graveyard)
+	#	FileUtils.mkdir_p($graveyard)
+	#end
+	
+	#rawdata = IO.read(ARGV[0])
+	#msgdata = JSON.parse(rawdata)
+	#ap msgdata
+	
+	$log.info("Setting up queue poller on #{$queueURL}")
+	poller = Aws::SQS::QueuePoller.new($queueURL)
+	$log.info("Setting up CloudSearch connection to #{$csEnd}")
 	$searchDomain = Aws::CloudSearchDomain::Client.new(endpoint: $csEnd)
-	db.commit($searchDomain)
-
-	reportdata = breakdown_report_data(reportdata)
-	if reportdata['detail']['query_args']
-		args = CGI::parse(reportdata['detail']['query_args'])
-	else
-		args = []
-	end
-	ap args
-	File.unlink(ARGV[0])
+	
+	$log.info("Waiting for messages...")
+	poller.poll(max_number_of_messages:10) do |msgbatch|
+		db = DocumentBatch.new
+		
+		$log.info("Processing batch of #{msgbatch.count} messages")
+		msgbatch.each {|msgdata|
+			reportdata = JSON.parse(msgdata['Message'])
+			reportdata['timestamp'] = msgdata['Timestamp']
+			$log.debug("#{reportdata}")
+			db.addDoc(reportdata,msgdata['MessageId'])
+			reportdata = breakdown_report_data(reportdata)
+			if reportdata['detail']['query_args']
+				args = CGI::parse(reportdata['detail']['query_args'])
+			else
+				args = []
+			end
+			$log.debug("#{args}")
+		}
+		$log.info("Committing...")
+		db.commit($searchDomain)
+		$log.info("Done.")
+	end #poller.poll
+	#File.unlink(ARGV[0])
 rescue StandardError=>e
-	puts "-ERROR: #{e.message}"
-	puts e.backtrace
-	FileUtils.mkdir_p($graveyard)
-	FileUtils.mv(ARGV[0],$graveyard)
+	$log.error(e.message)
+	$log.error(e.backtrace)
 end
