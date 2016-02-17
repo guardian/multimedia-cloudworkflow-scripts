@@ -25,6 +25,13 @@ BASEPATH=$(abspath "${BASH_SOURCE%/*}")
 echo Running in ${BASEPATH}
 
 echo -----------------------------------
+echo Building gems...
+echo -----------------------------------
+cd ${BASEPATH}/endpointerrors
+gem build endpointerrors.gemspec
+cd ${BASEPATH}
+
+echo -----------------------------------
 echo Building new tar bundle...
 echo -----------------------------------
 tar cv --exclude=".git/" --exclude=".vagrant/" --exclude=".*/" * | bzip2 > /tmp/cloudworkflowscripts.tar.bz2
