@@ -18,6 +18,8 @@ $graveyard = "/mnt/trap_endpoint_errors/graveyard"
 #end
 
 $log = Logger.new('/var/log/trap_endpoint_errors.log')
+#$log = Logger.new(STDOUT)
+$log.level = Logger::INFO
 
 if not ENV['AWS_REGION']
 	ENV['AWS_REGION'] = $amzRegion
@@ -96,7 +98,10 @@ begin
 		db = DocumentBatch.new
 		
 		$log.info("Processing batch of #{msgbatch.count} messages")
-		msgbatch.each {|msgdata|
+		msgbatch.each {|msgstruct|
+			$log.debug("#{msgstruct}")
+			msgdata = JSON.parse(msgstruct.body)
+			$log.debug("#{msgdata}")
 			reportdata = JSON.parse(msgdata['Message'])
 			reportdata['timestamp'] = msgdata['Timestamp']
 			$log.debug("#{reportdata}")
