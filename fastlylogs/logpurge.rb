@@ -52,6 +52,7 @@ while resultset = es.scroll(scroll_id: resultset['_scroll_id'], scroll: "5m") an
     bulklist << { delete: {_index: INDEXNAME, _type: INDEXTYPE, _id: entry['_id']}}
   }
   if bulklist.length>COMMIT_INTERVAL
+    logger.info("Purging #{COMMIT_INTERVAL} records...")
     es.bulk(body: bulklist)
     bulklist = []
   end
