@@ -6,6 +6,8 @@ require 'trollop'
 require 'awesome_print'
 
 INDEXNAME="fastlylogs"
+INDEXTYPE="log"
+COMMIT_INTERVAL=2000
 
 #START MAIN
 opts = Trollop::options do
@@ -43,12 +45,17 @@ resultset = es.search(index: INDEXNAME, search_type: "scan", scroll: "5m", body:
 
 
 ap resultset['_scroll_id']
+bulklist = []
 
 while resultset = es.scroll(scroll_id: resultset['_scroll_id'], scroll: "5m") and not resultset['hits']['hits'].empty? do
-  bulklist = []
   resultset['hits']['hits'].each {|entry|
-    bulklist << { delete: {_id: entry['_id']}}
+    bulklist << { delete: {_index: INDEXNAME, _type: INDEXTYPE, _id: entry['_id']}}
   }
-  ap bulklist
+  if bulklist.length>COMMIT_INTERVAL
+    es.bulk(body: bulklist)
+    bulklist = []
+  end
+  
+  #ap bulklist
 end
 logger.info("Done")
