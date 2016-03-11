@@ -11,7 +11,8 @@ require 'aws-sdk-core'
 require 'json'
 require 'base64'
 
-INDEXNAME='fastlylogs'
+#date substitutions from DateTime.strftime are valid here
+INDEXNAME='fastlylogs_%Y%m%d'
 TYPENAME="log"
 LOGFILE = "/var/log/fastly_log_chopper.log"
 
@@ -65,15 +66,15 @@ class ElasticIndexer
   def commit
     actions = []
     if(@records.count==0)
-        $logger.info("No records left to commit to #{INDEXNAME}!")
+        $logger.info("No records left to commit to #{$output_index}!")
         return
     end
-    $logger.info("Committing to index #{INDEXNAME}...")
+    $logger.info("Committing to index #{$output_index}...")
     @records.each do |ent|
         rec = ent[0]
         rec_id = ent[1]
         data = {
-            _index: INDEXNAME,
+            _index: $output_index,
             _type: TYPENAME,
             data: rec
         }
@@ -321,8 +322,10 @@ $logger.level=Logger::INFO
 ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: true)
 ets.cluster.health
 
-if not ets.indices.exists?(index: INDEXNAME)
-    ets.indices.create(index: INDEXNAME,body: {
+$output_index = DateTime.now().strftime($output_index)
+
+if not ets.indices.exists?(index: $output_index)
+    ets.indices.create(index: $output_index,body: {
                        settings: {
                        analysis: {
                        analyzer: {
