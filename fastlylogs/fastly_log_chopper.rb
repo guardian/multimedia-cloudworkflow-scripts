@@ -322,11 +322,14 @@ $logger.level=Logger::INFO
 ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: true)
 ets.cluster.health
 
-$output_index = DateTime.now().strftime($output_index)
+$output_index = DateTime.now().strftime(INDEXNAME)
 
 if not ets.indices.exists?(index: $output_index)
     ets.indices.create(index: $output_index,body: {
                        settings: {
+                         index: {
+                          replicas: 1
+                         }
                        analysis: {
                        analyzer: {
                        path: {
