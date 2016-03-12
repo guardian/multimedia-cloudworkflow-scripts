@@ -295,36 +295,10 @@ def download_from_s3(bucket: nil,key: nil)
   b.object(key).get().body
 end
 
-#START MAIN
-$opts = Trollop::options do
-  opt :elasticsearch, "Location of elasticsearch cluster to communicate with. Specify multiple hosts separated by commas.", :type=>:string, :default=>"localhost"
-  opt :queueurl, "URL of the Amazon SQS queue to listen to", :type=>:string
-  opt :region, "AWS region to operate in", :type=>:string, :default=>"eu-west-1"
-  opt :testfile, "Test run on the provided file", :type=>:string
-  opt :reindex_bucket, "Re-index from the specified bucket", :type=>:string
-  opt :reindex_prefix, "If --reindex-bucket is specified, limit the search to files with this prefix", :type=>:string
-end
+def setup_index()
+  $output_index = DateTime.now().strftime(INDEXNAME)
 
-if($opts.testfile)
-    $logger = Logger.new(STDOUT)
-    $logger.level = Logger.DEBUG
-    $logger.info("Starting test on #{$opts.testfile}")
-    File.open($opts.testfile) do |f|
-        parse_string(f.read,extra_data: {'domain' => '(test)'}, indexer: ElasticIndexer.new(client: ets, autocommit: 500))
-    end #File.open
-    exit(0)
-end
-
-$logger=Logger.new(LOGFILE)
-#$logger=Logger.new(STDOUT)
-$logger.level=Logger::INFO
-
-ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: true)
-ets.cluster.health
-
-$output_index = DateTime.now().strftime(INDEXNAME)
-
-if not ets.indices.exists?(index: $output_index)
+  if not ets.indices.exists?(index: $output_index)
     ets.indices.create(index: $output_index,body: {
                        settings: {
                          index: {
@@ -360,6 +334,35 @@ if not ets.indices.exists?(index: $output_index)
                        }
                        })
 end
+  
+#START MAIN
+$opts = Trollop::options do
+  opt :elasticsearch, "Location of elasticsearch cluster to communicate with. Specify multiple hosts separated by commas.", :type=>:string, :default=>"localhost"
+  opt :queueurl, "URL of the Amazon SQS queue to listen to", :type=>:string
+  opt :region, "AWS region to operate in", :type=>:string, :default=>"eu-west-1"
+  opt :testfile, "Test run on the provided file", :type=>:string
+  opt :reindex_bucket, "Re-index from the specified bucket", :type=>:string
+  opt :reindex_prefix, "If --reindex-bucket is specified, limit the search to files with this prefix", :type=>:string
+end
+
+if($opts.testfile)
+    $logger = Logger.new(STDOUT)
+    $logger.level = Logger.DEBUG
+    $logger.info("Starting test on #{$opts.testfile}")
+    File.open($opts.testfile) do |f|
+        parse_string(f.read,extra_data: {'domain' => '(test)'}, indexer: ElasticIndexer.new(client: ets, autocommit: 500))
+    end #File.open
+    exit(0)
+end
+
+$logger=Logger.new(LOGFILE)
+#$logger=Logger.new(STDOUT)
+$logger.level=Logger::INFO
+
+ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: true)
+ets.cluster.health
+
+setup_index()
 
 action = "listen"
 action = "send" if($opts.reindex_bucket)
@@ -408,6 +411,13 @@ Aws::SQS::QueuePoller.new($opts[:queueurl], {:client=>c}).poll do |msg|
     end
     case data['Event']
     when 'new'
+      $logger.info("Attempting to set up index...")
+      begin
+        setup_index()
+      rescue StandardError=>e
+        $logger.error("Unable to set up index: #{e.message} #{e.backtrace}")
+        throw :skip_delete
+      end
       $logger.info("Downloading #{data['Key']} from #{data['Bucket']}")
       if data['Key'].end_with?('.gz')
           $logger.error("I can't process gzip files, ignoring.")
@@ -425,9 +435,11 @@ Aws::SQS::QueuePoller.new($opts[:queueurl], {:client=>c}).poll do |msg|
       end #if data['Key'].end_with?
     else #case data['Event']
       $logger.error("Unknown event type #{data['Event']}")
+      throw :skip_delete
     end
   rescue StandardError=>e
     $logger.error(e)
+    throw :skip_delete
   end
 end
 #test elasticsearch
