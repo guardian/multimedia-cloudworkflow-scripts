@@ -109,7 +109,7 @@ class ElasticIndexer
       @client.indices.create(index: $output_index,body: {
                        settings: {
                          index: {
-                          replicas: 1
+                          number_of_replicas: 1
                          },
                          analysis: {
                            analyzer: {
