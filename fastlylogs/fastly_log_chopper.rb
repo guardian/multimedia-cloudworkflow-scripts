@@ -16,11 +16,13 @@ INDEXNAME='fastlylogs_%Y%m%d'
 TYPENAME="log"
 LOGFILE = "/var/log/fastly_log_chopper.log"
 
+$indexer_for = {}
 
 class ElasticIndexer
-  def initialize(client: nil,autocommit: 0)
+  def initialize(client: nil,index_name: nil,autocommit: 0)
     @records = []
     @autocommit_threshold = autocommit
+    @index_name = index_name
     if client
       @client=client
     else
@@ -51,13 +53,18 @@ class ElasticIndexer
     return h
   end #def flatten.hash
   
-  def add_record(rec, rec_id: nil)
+  def add_record(rec, rec_id: nil, rec_index: nil)
     #$logger.info("adding record")
-    if rec.is_a?(Hash)
-      @records << [self.flatten_hash(rec), rec_id]
-    else
-      @records << [rec, rec_id]
+    if rec_index==nil
+    	rec_index=@index_name
     end
+    
+    if rec.is_a?(Hash)
+      @records << [self.flatten_hash(rec), rec_id, rec_index]
+    else
+      @records << [rec, rec_id, rec_index]
+    end
+    
     if @records.length > @autocommit_threshold
       self.commit
     end
@@ -73,8 +80,13 @@ class ElasticIndexer
     @records.each do |ent|
         rec = ent[0]
         rec_id = ent[1]
+        if(ent.length>1)
+        	rec_index = ent[2]
+        else
+        	rec_index = @index_name
+        end
         data = {
-            _index: $output_index,
+            _index: rec_index,
             _type: TYPENAME,
             data: rec
         }
@@ -84,7 +96,52 @@ class ElasticIndexer
     @client.bulk(body: actions)
     @records = []
   end #def commit
+
+  def setup_index(for_time: nil,indexer: nil)
+    if for_time==nil
+      for_time=DateTime.now()
+    end
   
+    raise TypeError, "for_time must be a DateTime" if not for_time.is_a?(DateTime)
+    $output_index = for_time.strftime(INDEXNAME)
+
+    if not @client.indices.exists?(index: $output_index)
+      @client.indices.create(index: $output_index,body: {
+                       settings: {
+                         index: {
+                          replicas: 1
+                         },
+                         analysis: {
+                           analyzer: {
+                             path: {
+                               tokenizer: "path_hierarchy",
+                               type: "custom",
+                             }
+                           }
+                         }
+                       },
+                       mappings: {
+                         log: {
+                           properties: {
+                             pop: {type: "string", index: "not_analyzed"},
+                             city_name: {type: "string", index: "not_analyzed"},
+                             continent_code: {type: "string", index: "not_analyzed"},
+                             country_name: {type: "string", index: "not_analyzed"},
+                             client: {type: "ip"},
+                             location: {type: "geo_point"},
+                             filename: {type: "string", index: "not_analyzed"},
+                             postal_code: {type: "string", index: "not_analyzed"},
+                             region_name: {type: "string", index: "not_analyzed"},
+                             section: {type: "string", index: "not_analyzed"},
+                             series: {type: "string", index: "not_analyzed"},
+                             target: {type: "string", analyzer: "path"},
+                             file_extension: {type: "string", index: "not_analyzed"}
+                           }
+                         }
+                       }
+                    })
+        end #if not indices.exists?
+  end  
 end #class ElasticIndexer
 
 def podcast_details(path)
@@ -210,11 +267,24 @@ def parse_string(str,extra_data: {}, indexer: nil)
     end
     rtn=Hash[match.names.zip(match.captures)]
     rtn['line']=line
+    
     if rtn['datestamp']
       rtn['datestamp']=DateTime.parse(rtn['datestamp'])
       rtn['@timestamp']=rtn['datestamp']
     end
-    
+   
+    temp = $indexer_for[rtn['datestamp']]
+    if temp==nil
+      $logger.info("Attempting to set up index for #{rtn['datestamp']}...")
+      begin
+        indexer.setup_index(for_time: rtn['datestamp'])
+        $indexer_for[rtn['datestamp']] = "set up"
+      rescue StandardError=>e
+        $logger.error("Unable to set up index: #{e.message} #{e.backtrace}")
+        throw :skip_delete
+      end #exception block
+    end #if(indexer==nil)
+     
     d=/\.([^\.]+)$/.match(rtn['target'])
     if d
       rtn['file_extension']=d[1]
@@ -265,7 +335,7 @@ def parse_string(str,extra_data: {}, indexer: nil)
     rtn.merge!(extra_data)
     #raise StandardError, "Testing"
     doc_id = Base64.encode64(rtn['line'])
-    indexer.add_record(rtn, rec_id: doc_id)
+    indexer.add_record(rtn, rec_id: doc_id, rec_index: rtn['@timestamp'].strftime(INDEXNAME))
   }
   indexer.commit
 end
@@ -295,45 +365,6 @@ def download_from_s3(bucket: nil,key: nil)
   b.object(key).get().body
 end
 
-def setup_index()
-  $output_index = DateTime.now().strftime(INDEXNAME)
-
-  if not ets.indices.exists?(index: $output_index)
-    ets.indices.create(index: $output_index,body: {
-                       settings: {
-                         index: {
-                          replicas: 1
-                         }
-                       analysis: {
-                       analyzer: {
-                       path: {
-                       tokenizer: "path_hierarchy",
-                       type: "custom",
-                       }
-                       }
-                       }
-                       },
-                       mappings: {
-                       log: {
-                       properties: {
-                       pop: {type: "string", index: "not_analyzed"},
-                       city_name: {type: "string", index: "not_analyzed"},
-                       continent_code: {type: "string", index: "not_analyzed"},
-                       country_name: {type: "string", index: "not_analyzed"},
-                       client: {type: "ip"},
-                       location: {type: "geo_point"},
-                       filename: {type: "string", index: "not_analyzed"},
-                       postal_code: {type: "string", index: "not_analyzed"},
-                       region_name: {type: "string", index: "not_analyzed"},
-                       section: {type: "string", index: "not_analyzed"},
-                       series: {type: "string", index: "not_analyzed"},
-                       target: {type: "string", analyzer: "path"},
-                       file_extension: {type: "string", index: "not_analyzed"}
-                       }
-                       }
-                       }
-                       })
-end
   
 #START MAIN
 $opts = Trollop::options do
@@ -345,16 +376,6 @@ $opts = Trollop::options do
   opt :reindex_prefix, "If --reindex-bucket is specified, limit the search to files with this prefix", :type=>:string
 end
 
-if($opts.testfile)
-    $logger = Logger.new(STDOUT)
-    $logger.level = Logger.DEBUG
-    $logger.info("Starting test on #{$opts.testfile}")
-    File.open($opts.testfile) do |f|
-        parse_string(f.read,extra_data: {'domain' => '(test)'}, indexer: ElasticIndexer.new(client: ets, autocommit: 500))
-    end #File.open
-    exit(0)
-end
-
 $logger=Logger.new(LOGFILE)
 #$logger=Logger.new(STDOUT)
 $logger.level=Logger::INFO
@@ -362,7 +383,17 @@ $logger.level=Logger::INFO
 ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: true)
 ets.cluster.health
 
-setup_index()
+#setup_index()
+
+if($opts.testfile)
+    $logger = Logger.new(STDOUT)
+    $logger.level = Logger::DEBUG
+    $logger.info("Starting test on #{$opts.testfile}")
+    File.open($opts.testfile) do |f|
+        parse_string(f.read,extra_data: {'domain' => '(test)'}, indexer: ElasticIndexer.new(client: ets, autocommit: 1000))
+    end #File.open
+    exit(0)
+end
 
 action = "listen"
 action = "send" if($opts.reindex_bucket)
@@ -411,13 +442,6 @@ Aws::SQS::QueuePoller.new($opts[:queueurl], {:client=>c}).poll do |msg|
     end
     case data['Event']
     when 'new'
-      $logger.info("Attempting to set up index...")
-      begin
-        setup_index()
-      rescue StandardError=>e
-        $logger.error("Unable to set up index: #{e.message} #{e.backtrace}")
-        throw :skip_delete
-      end
       $logger.info("Downloading #{data['Key']} from #{data['Bucket']}")
       if data['Key'].end_with?('.gz')
           $logger.error("I can't process gzip files, ignoring.")
