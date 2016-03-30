@@ -380,7 +380,7 @@ $logger=Logger.new(LOGFILE)
 #$logger=Logger.new(STDOUT)
 $logger.level=Logger::INFO
 
-ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/),log: true)
+ets = Elasticsearch::Client.new(hosts: $opts.elasticsearch.split(/,\s*/))
 ets.cluster.health
 
 #setup_index()
