@@ -60,7 +60,7 @@ def addDoc(hashdata,id)
 end #def addDoc
 
 def commit(searchdomain) #searchdomain should be an Aws::CloudSearchDomain::Client
-	jsondata = @docs.to_json
+	jsondata = JSON.dump(@docs)
 	$log.info("Committing #{@docs.count} documents to index #{$csEnd}")
 	#ap @docs
 	#puts jsondata
