@@ -18,10 +18,15 @@ function abspath() {
     fi
 }
 
-DEPLOYPATH="s3://gnm-multimedia-archivedtech/WorkflowMaster"
+DEPLOYPATH="$1/cloudworkflowscripts"
 BASEPATH=$(abspath "${BASH_SOURCE%/*}")
 
 #echo ${BASH_SOURCE}
+if [ ${DEPLOYPATH} == "" ]; then
+    echo Usage: ./deployit.sh s3://path/to/deploy
+    exit 1
+fi
+
 echo Running in ${BASEPATH}
 
 echo -----------------------------------
